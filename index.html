@@ -791,6 +791,18 @@
       </select>
     </div>
 
+    <div class="field" style="margin-top:14px;">
+      <label style="cursor:pointer; display:flex; align-items:center; gap:8px;">
+        <input type="checkbox" id="ctrlInjReducesPsuLoad" checked
+          style="width:15px;height:15px;accent-color:var(--accent);cursor:pointer;">
+        <span style="color:var(--text); font-weight:600;">Account for injection in PSU sizing</span>
+      </label>
+      <div style="font-size:.73rem; color:var(--muted); margin-top:4px; margin-left:23px; line-height:1.6;">
+        Reduces PSU load per port — injected power doesn't flow through the PSU.
+        Each port's PSU load = amps from start to first injection point only.
+      </div>
+    </div>
+
     <div class="section-label">Power Supply</div>
 
     <div class="field">
@@ -2236,43 +2248,8 @@ function _calculateController() {
       portStart: b*spec.portsPerBank+1, portEnd: (b+1)*spec.portsPerBank });
   }
 
-  // ── Greedy PSU grouping (bin-pack banks onto PSUs) ─────────────────────────
-  const psGroups = [];
-  let curBanks = [], curWatts = 0;
-  for (const bank of bankData) {
-    const bW = bank.totalWatts;
-    if (bW > usableWatts) {
-      // Bank alone exceeds one PS — flag and give it its own PS
-      if (curBanks.length) { psGroups.push({banks:[...curBanks], totalWatts:curWatts, overloaded:false}); curBanks=[]; curWatts=0; }
-      psGroups.push({banks:[bank.b], totalWatts:bW, overloaded:true});
-    } else if (curWatts + bW <= usableWatts) {
-      curBanks.push(bank.b); curWatts += bW;
-    } else {
-      psGroups.push({banks:[...curBanks], totalWatts:curWatts, overloaded:false});
-      curBanks=[bank.b]; curWatts=bW;
-    }
-  }
-  if (curBanks.length) psGroups.push({banks:[...curBanks], totalWatts:curWatts, overloaded:false});
-
-  const numPS = psGroups.length;
-  const psGroupData = psGroups.map((g, i) => {
-    const psAmps       = g.totalWatts / VOLTS;           // DC amps this PSU supplies
-    const vdropPigtail = pigtailOn ? psAmps * pigtailRes * 2 * pigtailLen : 0;
-    const pigtailOk    = pigtailOn ? psAmps <= pigtailAmpacity : true;
-    return {
-      ...g, psNum:i+1,
-      psAmps, vdropPigtail, pigtailOk,
-      acDraw:  g.totalWatts / ps.efficiency,
-      acAmps:  g.totalWatts / ps.efficiency / acV,
-      loadPct: g.totalWatts / usableWatts * 100,
-    };
-  });
-
-  // Build bank → PSU lookup (used for display in PSU allocation table)
-  const bankToPsu = {};
-  psGroupData.forEach(g => g.banks.forEach(bi => { bankToPsu[bi] = g; }));
-
   // Per-bank: extension drop + injection analysis per port
+  // (must be calculated BEFORE PSU bin-packing to know psuLoadWatts)
   bankData.forEach(b => {
     b.portExtData = [];
     b.portInjData = [];
@@ -2342,6 +2319,23 @@ function _calculateController() {
         rwuVBudget, rwuPixPerSeg, rwuNumInj, rwuInjPositions, rwuNoBudget, rwuNeedsInj, injSaved,
       });
     });
+
+    // ── PSU load accounting for injection ───────────────────────────────────
+    // When injection is used, PSU only supplies pixels up to first injection point
+    const injReducesPsu = document.getElementById('ctrlInjReducesPsuLoad').checked;
+    b.portInjData.forEach((p, i) => {
+      if (injReducesPsu && p.injPositions.length > 0) {
+        // PSU supplies from start to first injection point only
+        const psuPx = p.injPositions[0];  // first injection point
+        p.psuLoadAmps = psuPx * ampsPerPixel;
+        p.rwuPsuLoadAmps = psuPx * rwuAmpsPerPx;
+      } else {
+        // PSU supplies all pixels (no injection or feature disabled)
+        p.psuLoadAmps = p.portAmps;
+        p.rwuPsuLoadAmps = p.rwuPortAmps;
+      }
+    });
+
     b.maxCtoEDrop = Math.max(...b.portExtData.map(p => p.vdropCtoE), 0);
     b.maxExtDrop  = Math.max(...b.portExtData.map(p => p.vdropExt), 0);
     b.maxPortDrop = Math.max(...b.portExtData.map(p => p.vdropPortTotal), 0);
@@ -2351,6 +2345,11 @@ function _calculateController() {
     b.rwuTotalInj   = b.portInjData.reduce((s, p) => s + p.rwuNumInj, 0);
     b.portsNeedInj  = b.portInjData.filter(p => p.needsInj).length;
     b.rwuPortsNeedInj = b.portInjData.filter(p => p.rwuNeedsInj).length;
+    // PSU load totals (either full or injection-reduced)
+    b.psuLoadAmps   = b.portInjData.reduce((s, p) => s + p.psuLoadAmps, 0);
+    b.psuLoadWatts  = b.psuLoadAmps * VOLTS;
+    b.rwuPsuLoadAmps  = b.portInjData.reduce((s, p) => s + p.rwuPsuLoadAmps, 0);
+    b.rwuPsuLoadWatts = b.rwuPsuLoadAmps * VOLTS;
   });
 
   const totalDCWatts   = bankData.reduce((s,b) => s+b.totalWatts, 0);
@@ -2383,6 +2382,50 @@ function _calculateController() {
   }
   if (rwuCurW > 0) rwuNumPS++;
   const rwuAvgLoadPerPS = rwuNumPS ? rwuTotalDCWatts / rwuNumPS : 0;
+
+  // ── Greedy PSU grouping (bin-pack banks onto PSUs using PSU load) ──────────
+  // Uses psuLoadWatts (injection-reduced if enabled) instead of totalWatts
+  const psGroups = [];
+  let curBanks = [], curWatts = 0;
+  for (const bank of bankData) {
+    const bW = bank.psuLoadWatts;  // uses injection-reduced load if enabled
+    if (bW > usableWatts) {
+      // Bank alone exceeds one PS
+      if (curBanks.length) {
+        psGroups.push({banks:[...curBanks], psuLoadWatts:curWatts, overloaded:false});
+        curBanks=[]; curWatts=0;
+      }
+      psGroups.push({banks:[bank.b], psuLoadWatts:bW, overloaded:true});
+    } else if (curWatts + bW <= usableWatts) {
+      curBanks.push(bank.b); curWatts += bW;
+    } else {
+      psGroups.push({banks:[...curBanks], psuLoadWatts:curWatts, overloaded:false});
+      curBanks=[bank.b]; curWatts=bW;
+    }
+  }
+  if (curBanks.length) psGroups.push({banks:[...curBanks], psuLoadWatts:curWatts, overloaded:false});
+
+  const numPS = psGroups.length;
+  const psGroupData = psGroups.map((g, i) => {
+    // Calculate both PSU load (for bin-packing) and actual total watts (for display)
+    const totalWatts = g.banks.reduce((s, bi) => s + bankData[bi].totalWatts, 0);
+    const rwuTotalWatts = g.banks.reduce((s, bi) => s + bankData[bi].rwuTotalWatts, 0);
+    const psAmps       = g.psuLoadWatts / VOLTS;
+    const vdropPigtail = pigtailOn ? psAmps * pigtailRes * 2 * pigtailLen : 0;
+    const pigtailOk    = pigtailOn ? psAmps <= pigtailAmpacity : true;
+    return {
+      ...g, psNum:i+1,
+      totalWatts, rwuTotalWatts,  // for display
+      psAmps, vdropPigtail, pigtailOk,
+      acDraw:  g.psuLoadWatts / ps.efficiency,
+      acAmps:  g.psuLoadWatts / ps.efficiency / acV,
+      loadPct: g.psuLoadWatts / usableWatts * 100,
+    };
+  });
+
+  // Build bank → PSU lookup (used for display in PSU allocation table)
+  const bankToPsu = {};
+  psGroupData.forEach(g => g.banks.forEach(bi => { bankToPsu[bi] = g; }));
 
   // ── Greedy circuit bin-packing by actual AC amps per PSU ──────────────────
   // (replaces the old uniform max-PSU-size approach which over-counted circuits)
@@ -2525,10 +2568,20 @@ function _calculateController() {
   }).join('');
 
   // ── PS allocation rows ────────────────────────────────────────────────────
-  const psRows = psGroupData.map(g => `<tr>
+  const injReducesPsu = document.getElementById('ctrlInjReducesPsuLoad').checked;
+  const psRows = psGroupData.map(g => {
+    const psuLoadDiff = g.totalWatts !== g.psuLoadWatts;
+    const rwuPsuWatts = g.banks.reduce((s, bi) => s + bankData[bi].rwuPsuLoadWatts, 0);
+    return `<tr>
     <td><strong>PSU ${g.psNum}</strong></td>
     <td>Bank${g.banks.length>1?'s':''}&nbsp;${g.banks.map(b=>b+1).join(', ')}</td>
-    <td>${(g.totalWatts/VOLTS).toFixed(2)}A &mdash; ${g.totalWatts.toFixed(1)}W DC</td>
+    <td>
+      ${(g.psuLoadWatts/VOLTS).toFixed(2)}A &mdash; ${g.psuLoadWatts.toFixed(1)}W DC
+      ${psuLoadDiff
+        ? `<br><span style="font-size:.7rem; color:var(--muted);">Total: ${g.totalWatts.toFixed(1)}W (injection reduces PSU load)</span>`
+        : ''}
+      <br><span style="font-size:.72rem; color:var(--ok);">RWU ~${(rwuPsuWatts/VOLTS).toFixed(2)}A / ${rwuPsuWatts.toFixed(1)}W</span>
+    </td>
     <td><span class="badge ${g.overloaded?'badge-danger':g.loadPct>90?'badge-warn':'badge-ok'}">${g.loadPct.toFixed(0)}%</span></td>
     ${pigtailOn ? `<td>${g.vdropPigtail.toFixed(3)}V
       <br><span style="font-size:.72rem;color:${g.pigtailOk?'var(--muted)':'var(--danger)'};">
@@ -2538,7 +2591,8 @@ function _calculateController() {
     <td>${g.overloaded
       ? '<span class="badge badge-danger">&#9888; Exceeds PS capacity &mdash; upgrade PS or split bank</span>'
       : '<span class="badge badge-ok">OK</span>'}</td>
-  </tr>`).join('');
+  </tr>`;
+  }).join('');
 
   // ── Render ────────────────────────────────────────────────────────────────
   document.getElementById('ctrlResults').innerHTML = `
