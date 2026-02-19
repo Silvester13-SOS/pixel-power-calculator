@@ -1,0 +1,2907 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WS2811 12V Pixel Power Calculator</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"
+  onerror="this.onerror=null;this.src='https://unpkg.com/chart.js@4.4.0/dist/chart.umd.min.js'"></script>
+<style>
+  :root {
+    --bg: #0f0f14;
+    --panel: #1a1a24;
+    --panel2: #22222f;
+    --border: #2e2e42;
+    --accent: #4f8ef7;
+    --accent2: #7c3aed;
+    --warn: #f59e0b;
+    --danger: #ef4444;
+    --ok: #22c55e;
+    --text: #e2e8f0;
+    --muted: #94a3b8;
+    --radius: 10px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    font-size: 15px;
+    min-height: 100vh;
+  }
+  header {
+    background: linear-gradient(135deg, #1a1a24 0%, #12122a 100%);
+    border-bottom: 1px solid var(--border);
+    padding: 18px 30px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+  header .logo {
+    width: 38px; height: 38px;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px;
+  }
+  header h1 { font-size: 1.35rem; font-weight: 700; letter-spacing: -0.3px; }
+  header p { font-size: 0.8rem; color: var(--muted); margin-top: 2px; }
+  .main { display: grid; grid-template-columns: 340px 1fr; gap: 0; min-height: calc(100vh - 70px); }
+  .sidebar {
+    background: var(--panel);
+    border-right: 1px solid var(--border);
+    padding: 22px 18px;
+    overflow-y: auto;
+  }
+  .content { padding: 22px; overflow-y: auto; }
+
+  /* Form */
+  .section-label {
+    font-size: 0.7rem; font-weight: 700; letter-spacing: 1.2px;
+    text-transform: uppercase; color: var(--muted);
+    margin-bottom: 12px; margin-top: 20px;
+  }
+  .section-label:first-child { margin-top: 0; }
+  .field { margin-bottom: 14px; }
+  .field label { display: block; font-size: 0.82rem; color: var(--muted); margin-bottom: 5px; font-weight: 500; }
+  .field input[type=number], .field select {
+    width: 100%; padding: 9px 12px;
+    background: var(--panel2); border: 1px solid var(--border);
+    border-radius: 7px; color: var(--text); font-size: 0.9rem;
+    outline: none; transition: border-color .15s;
+  }
+  .field input[type=number]:focus, .field select:focus { border-color: var(--accent); }
+  /* Info icon + tooltip */
+  .field label { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
+  .info-btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+    width: 15px; height: 15px; border-radius: 50%;
+    background: rgba(79,142,247,.18); border: 1px solid rgba(79,142,247,.45);
+    color: var(--accent); font-size: 9px; font-weight: 700;
+    cursor: pointer; font-style: italic; font-family: Georgia, serif;
+    line-height: 1; padding: 0; transition: background .15s, border-color .15s;
+    margin-left: 2px;
+  }
+  .info-btn:hover { background: rgba(79,142,247,.38); border-color: var(--accent); }
+
+  .tip-panel {
+    position: fixed; z-index: 9999;
+    width: 310px; max-width: calc(100vw - 24px);
+    background: #1c1c2e; border: 1px solid var(--accent);
+    border-radius: 10px; padding: 14px 16px;
+    font-size: 0.78rem; color: var(--muted); line-height: 1.7;
+    box-shadow: 0 10px 40px rgba(0,0,0,.7);
+    opacity: 0; pointer-events: none;
+    transition: opacity .15s;
+  }
+  .tip-panel.visible { opacity: 1; pointer-events: auto; }
+  .tip-title {
+    font-size: 0.82rem; font-weight: 700; color: var(--text);
+    margin-bottom: 8px; padding-bottom: 7px;
+    border-bottom: 1px solid var(--border);
+    display: flex; justify-content: space-between; align-items: flex-start; gap: 8px;
+  }
+  .tip-close {
+    flex-shrink: 0; cursor: pointer; color: var(--muted);
+    font-size: 0.9rem; font-style: normal; line-height: 1;
+    background: none; border: none; padding: 0; font-weight: 400;
+  }
+  .tip-close:hover { color: var(--text); }
+  .tip-panel strong { color: var(--text); }
+  .tip-section { margin-top: 7px; }
+  .tip-section-head { font-weight: 700; color: #a78bfa; font-size: 0.72rem;
+    text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 3px; }
+
+  /* Topology bar */
+  .topo-bar {
+    display: flex; align-items: center; flex-wrap: wrap; gap: 4px;
+    background: rgba(79,142,247,.06); border: 1px solid rgba(79,142,247,.2);
+    border-radius: 8px; padding: 9px 12px; margin-bottom: 16px; font-size: 0.75rem;
+  }
+  .topo-node {
+    background: var(--panel2); border: 1px solid var(--border);
+    border-radius: 5px; padding: 3px 9px; color: var(--text); font-weight: 600; white-space: nowrap;
+  }
+  .topo-arrow { color: var(--accent); font-weight: 700; font-size: 0.85rem; }
+
+  /* Slider */
+  .slider-wrap { display: flex; align-items: center; gap: 10px; }
+  .slider-wrap input[type=range] {
+    flex: 1; -webkit-appearance: none; height: 6px;
+    background: var(--border); border-radius: 3px; outline: none; cursor: pointer;
+  }
+  .slider-wrap input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none; width: 18px; height: 18px;
+    background: var(--accent); border-radius: 50%; border: 2px solid var(--bg);
+    box-shadow: 0 0 6px rgba(79,142,247,.5);
+  }
+  .slider-val {
+    min-width: 48px; text-align: right; font-weight: 700;
+    color: var(--accent); font-size: 0.95rem;
+  }
+
+  /* Radio group */
+  .radio-group { display: flex; flex-direction: column; gap: 6px; }
+  .radio-item {
+    display: flex; align-items: center; gap: 8px; padding: 8px 10px;
+    background: var(--panel2); border: 1px solid var(--border);
+    border-radius: 7px; cursor: pointer; transition: border-color .15s;
+  }
+  .radio-item:hover { border-color: var(--accent); }
+  .radio-item input { accent-color: var(--accent); }
+  .radio-item span { font-size: 0.85rem; }
+
+  /* Calc button */
+  .calc-btn {
+    width: 100%; padding: 12px; margin-top: 18px;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    color: #fff; border: none; border-radius: 8px;
+    font-size: 1rem; font-weight: 700; cursor: pointer;
+    letter-spacing: 0.3px; transition: opacity .15s, transform .1s;
+    box-shadow: 0 4px 18px rgba(79,142,247,.3);
+  }
+  .calc-btn:hover { opacity: .9; transform: translateY(-1px); }
+  .calc-btn:active { transform: translateY(0); }
+
+  /* Results */
+  .results-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 14px;
+    margin-bottom: 20px;
+  }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px 18px;
+    position: relative;
+    overflow: hidden;
+  }
+  .card::before {
+    content: '';
+    position: absolute; top: 0; left: 0; right: 0; height: 3px;
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+  }
+  .card.warn::before { background: linear-gradient(90deg, var(--warn), #f97316); }
+  .card.ok::before { background: linear-gradient(90deg, var(--ok), #16a34a); }
+  .card.danger::before { background: linear-gradient(90deg, var(--danger), #b91c1c); }
+  .card-title { font-size: 0.72rem; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: var(--muted); margin-bottom: 10px; }
+  .card-value { font-size: 1.9rem; font-weight: 800; line-height: 1; color: var(--text); }
+  .card-unit { font-size: 0.8rem; color: var(--muted); margin-top: 3px; }
+  .card-detail { font-size: 0.78rem; color: var(--muted); margin-top: 8px; border-top: 1px solid var(--border); padding-top: 8px; line-height: 1.6; }
+  .card-detail strong { color: var(--text); }
+
+  .badge {
+    display: inline-block; padding: 2px 8px; border-radius: 20px;
+    font-size: 0.72rem; font-weight: 700; letter-spacing: 0.5px;
+  }
+  .badge-ok { background: rgba(34,197,94,.15); color: var(--ok); }
+  .badge-warn { background: rgba(245,158,11,.15); color: var(--warn); }
+  .badge-danger { background: rgba(239,68,68,.15); color: var(--danger); }
+
+  /* Section headers */
+  .result-section {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    margin-bottom: 16px;
+    overflow: hidden;
+  }
+  .result-section-header {
+    padding: 12px 18px;
+    background: var(--panel2);
+    border-bottom: 1px solid var(--border);
+    font-size: 0.85rem; font-weight: 700;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .result-section-body { padding: 16px 18px; }
+
+  /* Circuit table */
+  table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+  th {
+    text-align: left; padding: 8px 12px;
+    background: var(--panel2); color: var(--muted);
+    font-weight: 600; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.8px;
+    border-bottom: 1px solid var(--border);
+  }
+  td { padding: 9px 12px; border-bottom: 1px solid var(--border); color: var(--text); }
+  tr:last-child td { border-bottom: none; }
+  tr:nth-child(even) td { background: rgba(255,255,255,.02); }
+
+  /* Chart */
+  .chart-wrap {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 18px;
+    margin-bottom: 16px;
+  }
+  .chart-wrap canvas { max-height: 320px; }
+
+  /* Injection list */
+  .inj-list { list-style: none; }
+  .inj-list li {
+    padding: 9px 0; border-bottom: 1px solid var(--border);
+    display: flex; justify-content: space-between; align-items: center;
+    font-size: 0.85rem;
+  }
+  .inj-list li:last-child { border-bottom: none; }
+  .inj-list li .inj-label { color: var(--muted); }
+  .inj-list li .inj-val { font-weight: 700; color: var(--text); }
+
+  /* Empty state */
+  .empty {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    height: 60vh; color: var(--muted); text-align: center; gap: 12px;
+  }
+  .empty .icon { font-size: 3rem; opacity: .4; }
+  .empty p { max-width: 300px; line-height: 1.6; font-size: 0.9rem; }
+
+  /* Mode selector bar */
+  .mode-bar {
+    background: var(--panel);
+    border-bottom: 2px solid var(--border);
+    padding: 0 30px;
+    display: flex;
+    gap: 0;
+  }
+  .mode-tab {
+    padding: 12px 22px;
+    background: none;
+    border: none;
+    border-bottom: 3px solid transparent;
+    margin-bottom: -2px;
+    color: var(--muted);
+    font-size: 0.88rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: color .15s, border-color .15s;
+    letter-spacing: 0.2px;
+    white-space: nowrap;
+  }
+  .mode-tab:hover { color: var(--text); }
+  .mode-tab.active { color: var(--text); border-bottom-color: var(--accent); }
+
+  @media (max-width: 900px) {
+    .main { grid-template-columns: 1fr; }
+    .sidebar { border-right: none; border-bottom: 1px solid var(--border); }
+    .mode-bar { padding: 0 12px; }
+    .mode-tab { padding: 10px 14px; font-size: .8rem; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">&#9889;</div>
+  <div>
+    <h1>WS2811 / WS2812B Pixel Power Calculator</h1>
+    <p>MeanWell power supplies &bull; NEC wire sizing &bull; AC circuit planning</p>
+  </div>
+</header>
+
+<!-- ── Mode selector ────────────────────────────────────────────────────── -->
+<div class="mode-bar">
+  <button class="mode-tab active" id="modeTab1" onclick="setMode(1)">&#9889; String Power Needs</button>
+  <button class="mode-tab"        id="modeTab2" onclick="setMode(2)">&#127917; Controller Setup Power Needs</button>
+</div>
+
+<div class="main" id="mode1Main">
+  <!-- SIDEBAR INPUTS -->
+  <div class="sidebar">
+
+    <!-- compact wiring flow -->
+    <div class="topo-bar">
+      <div class="topo-node">Wall Outlet</div>
+      <span class="topo-arrow">&#8594;</span>
+      <div class="topo-node">Power Supply</div>
+      <span class="topo-arrow">&#8594;</span>
+      <div class="topo-node">Pigtail</div>
+      <span class="topo-arrow">&#8594;</span>
+      <div class="topo-node">Extension Wire</div>
+      <span class="topo-arrow">&#8594;</span>
+      <div class="topo-node">&#9654; Pixel 1</div>
+      <span class="topo-arrow">&#8594;</span>
+      <div class="topo-node">&#8943; Inject &#8943;</div>
+      <span class="topo-arrow">&#8594;</span>
+      <div class="topo-node">Pixel N</div>
+    </div>
+
+    <div class="section-label">Pixel Setup</div>
+
+    <!-- Pixel voltage toggle -->
+    <div class="field">
+      <label>Pixel Supply Voltage <button class="info-btn" onclick="toggleTip(this,'pixelVoltage')">i</button></label>
+      <div style="display:flex; gap:8px; margin-top:2px;">
+        <label style="flex:1; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:6px;
+          padding:9px 8px; background:var(--panel2); border:2px solid var(--accent);
+          border-radius:7px; font-weight:700; color:var(--text); font-size:.9rem;" id="volt12label">
+          <input type="radio" name="pixelVoltage" id="pv12" value="12" checked onchange="onVoltageChange()" style="accent-color:var(--accent);">
+          12V
+        </label>
+        <label style="flex:1; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:6px;
+          padding:9px 8px; background:var(--panel2); border:2px solid var(--border);
+          border-radius:7px; font-weight:700; color:var(--muted); font-size:.9rem;" id="volt5label">
+          <input type="radio" name="pixelVoltage" id="pv5" value="5" onchange="onVoltageChange()" style="accent-color:var(--accent);">
+          5V
+        </label>
+      </div>
+    </div>
+
+    <!-- Pixel construction type -->
+    <div class="field">
+      <label>Pixel Construction <button class="info-btn" onclick="toggleTip(this,'pixelConstruction')">i</button></label>
+      <div style="display:flex; gap:8px; margin-top:2px;">
+        <label style="flex:1; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:6px;
+          padding:9px 8px; background:var(--panel2); border:2px solid var(--accent);
+          border-radius:7px; font-weight:700; color:var(--text); font-size:.85rem;" id="ptResistorLabel">
+          <input type="radio" name="pixelType" id="ptResistor" value="resistor" checked onchange="onPixelTypeChange()" style="accent-color:var(--accent);">
+          Resistor
+        </label>
+        <label style="flex:1; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:6px;
+          padding:9px 8px; background:var(--panel2); border:2px solid var(--border);
+          border-radius:7px; font-weight:700; color:var(--muted); font-size:.85rem;" id="ptRegulatedLabel">
+          <input type="radio" name="pixelType" id="ptRegulated" value="regulated" onchange="onPixelTypeChange()" style="accent-color:var(--accent);">
+          Regulated
+        </label>
+      </div>
+      <div id="pixelTypeNote" style="margin-top:5px; padding:6px 9px; background:rgba(79,142,247,.07);
+        border:1px solid rgba(79,142,247,.2); border-radius:6px; font-size:0.73rem; color:var(--muted); line-height:1.55;">
+        <span id="pixelTypeText"></span>
+      </div>
+    </div>
+
+    <div class="field">
+      <label>Number of Pixels <button class="info-btn" onclick="toggleTip(this,'numPixels')">i</button></label>
+      <input type="number" id="numPixels" value="500" min="1" max="100000">
+    </div>
+
+    <div class="field">
+      <label>Watts per Pixel at 100% White <button class="info-btn" onclick="toggleTip(this,'wattsPerPixel')">i</button></label>
+      <input type="number" id="wattsPerPixel" value="0.60" min="0.01" max="5" step="0.01">
+      <div id="wppNote" style="margin-top:5px; padding:6px 9px; background:rgba(79,142,247,.07);
+        border:1px solid rgba(79,142,247,.2); border-radius:6px; font-size:0.73rem; color:var(--muted); line-height:1.55;">
+        <span id="wppText">Most common for <strong style="color:var(--text)">12V WS2811</strong>:
+        <strong style="color:var(--accent)">0.60 W/pixel</strong> at 100% white (50mA &times; 12V).
+        Adjust down for dimmer installations.</span>
+      </div>
+    </div>
+
+    <div class="field">
+      <label>Pixel Density / Spacing <button class="info-btn" onclick="toggleTip(this,'density')">i</button></label>
+      <select id="density">
+        <option value="30">30 px/m — 3.3 cm (1.3 in) spacing</option>
+        <option value="60" selected>60 px/m — 1.65 cm (0.65 in) spacing</option>
+        <option value="custom">Custom — enter spacing in inches</option>
+      </select>
+    </div>
+
+    <div class="field" id="customSpacingField" style="display:none">
+      <label>Custom Pixel Spacing (inches) <button class="info-btn" onclick="toggleTip(this,'customSpacing')">i</button></label>
+      <input type="number" id="customSpacing" value="2" min="0.1" step="0.1">
+    </div>
+
+    <div class="field">
+      <label>Brightness Level <button class="info-btn" onclick="toggleTip(this,'brightness')">i</button></label>
+      <div class="slider-wrap">
+        <input type="range" id="brightness" min="1" max="100" value="100">
+        <div class="slider-val" id="brightnessVal">100%</div>
+      </div>
+    </div>
+
+    <div class="section-label">DC Wiring <button class="info-btn" onclick="toggleTip(this,'wireSection')" style="vertical-align:middle">i</button></div>
+
+    <!-- Pigtail toggle -->
+    <div class="field" style="margin-bottom:8px;">
+      <label style="cursor:pointer; display:flex; align-items:center; gap:8px;">
+        <input type="checkbox" id="pigtailEnabled" onchange="togglePigtail()" style="width:15px;height:15px;accent-color:var(--accent);cursor:pointer;">
+        <span style="color:var(--text); font-weight:600;">Include Controller Pigtail</span>
+        <button class="info-btn" onclick="toggleTip(this,'pigtailEnabled')">i</button>
+      </label>
+    </div>
+
+    <!-- Pigtail details (shown when checked) -->
+    <div id="pigtailFields" style="display:none; padding:10px 12px; background:rgba(79,142,247,.06); border:1px solid rgba(79,142,247,.2); border-radius:7px; margin-bottom:12px;">
+      <div class="field" style="margin-bottom:10px;">
+        <label>Pigtail Wire Gauge <button class="info-btn" onclick="toggleTip(this,'pigtailGauge')">i</button></label>
+        <select id="pigtailGauge">
+          <option value="10">10 AWG (30A)</option>
+          <option value="12">12 AWG (20A)</option>
+          <option value="14">14 AWG (15A)</option>
+          <option value="16">16 AWG (13A)</option>
+          <option value="18" selected>18 AWG (7A) — typical short pigtail</option>
+          <option value="20">20 AWG (5A)</option>
+        </select>
+      </div>
+      <div class="field" style="margin-bottom:0;">
+        <label>Pigtail Length (feet) <button class="info-btn" onclick="toggleTip(this,'pigtailLen')">i</button></label>
+        <input type="number" id="pigtailLen" value="1.5" min="0.1" step="0.5">
+      </div>
+    </div>
+
+    <!-- Extension wire -->
+    <div class="field">
+      <label>Extension Wire Gauge <button class="info-btn" onclick="toggleTip(this,'extensionGauge')">i</button></label>
+      <select id="extensionGauge">
+        <option value="10">10 AWG (30A) — heavy / long runs</option>
+        <option value="12" selected>12 AWG (20A) — recommended</option>
+        <option value="14">14 AWG (15A)</option>
+        <option value="16">16 AWG (13A)</option>
+        <option value="18">18 AWG (7A) — short runs only</option>
+      </select>
+    </div>
+
+    <div class="field">
+      <label>Extension Wire Length (feet) <button class="info-btn" onclick="toggleTip(this,'extensionLen')">i</button></label>
+      <input type="number" id="extensionLen" value="10" min="0" step="1">
+    </div>
+
+    <!-- Injection wire -->
+    <div class="field">
+      <label>Injection Wire Gauge — Mid-Run Taps <button class="info-btn" onclick="toggleTip(this,'injGauge')">i</button></label>
+      <select id="injGauge">
+        <option value="12">12 AWG (20A)</option>
+        <option value="14">14 AWG (15A)</option>
+        <option value="16">16 AWG (13A)</option>
+        <option value="18" selected>18 AWG (7A) — typical injection tap</option>
+        <option value="20">20 AWG (5A) — very low current only</option>
+      </select>
+    </div>
+
+    <div class="section-label">Power Supply Settings</div>
+
+    <div class="field">
+      <label>Power Supply Model <button class="info-btn" onclick="toggleTip(this,'psModel')">i</button></label>
+      <select id="psModel">
+        <!-- populated dynamically by onVoltageChange() -->
+      </select>
+    </div>
+
+    <div class="field">
+      <label>PS Derate Factor <button class="info-btn" onclick="toggleTip(this,'psDerate')">i</button></label>
+      <select id="psDerate">
+        <option value="0.8" selected>80% — recommended</option>
+        <option value="0.9">90% — cool / ventilated location</option>
+        <option value="1.0">100% — not recommended</option>
+      </select>
+    </div>
+
+    <div class="section-label">AC Circuit Settings</div>
+
+    <div class="field">
+      <label>AC Safety Factor <button class="info-btn" onclick="toggleTip(this,'acSafety')">i</button></label>
+      <select id="acSafety">
+        <option value="0.8" selected>80% — NEC 210.20 compliant</option>
+        <option value="0.75">75% — conservative</option>
+        <option value="0.5">50% — very conservative</option>
+      </select>
+    </div>
+
+    <div class="field">
+      <label>AC Mains Voltage <button class="info-btn" onclick="toggleTip(this,'acVoltage')">i</button></label>
+      <select id="acVoltage">
+        <option value="120" selected>120V — North America</option>
+        <option value="240">240V — Europe / UK / AU</option>
+      </select>
+    </div>
+
+    <div class="field">
+      <label>Circuit Breaker Rating <button class="info-btn" onclick="toggleTip(this,'breakerAmps')">i</button></label>
+      <select id="breakerAmps">
+        <option value="15" selected>15A — standard US household</option>
+        <option value="20">20A — kitchen / utility circuit</option>
+      </select>
+    </div>
+
+    <div class="section-label">Voltage Drop Graph</div>
+
+    <div class="field">
+      <label>Max Run Length to Graph (ft) <button class="info-btn" onclick="toggleTip(this,'maxRunFeet')">i</button></label>
+      <input type="number" id="maxRunFeet" value="100" min="10" max="1000">
+    </div>
+
+    <div class="field">
+      <label>Min Acceptable Pixel Voltage (V) <button class="info-btn" onclick="toggleTip(this,'minVoltage')">i</button></label>
+      <input type="number" id="minVoltage" value="11.0" min="1" max="15" step="0.1">
+      <div id="minVNote" style="margin-top:4px; font-size:0.72rem; color:var(--muted);">
+        Recommended: <strong style="color:var(--text)" id="minVRecommend">11.0V for 12V pixels</strong>
+      </div>
+    </div>
+
+    <button class="calc-btn" onclick="calculate()">&#9889; Calculate</button>
+  </div>
+
+  <!-- MAIN CONTENT -->
+  <div class="content" id="results">
+    <div class="empty">
+      <div class="icon">&#9889;</div>
+      <p>Enter your pixel count and settings, then click <strong>Calculate</strong> to see full power analysis.</p>
+    </div>
+  </div>
+</div>
+
+<!-- ── CONTROLLER MODE ───────────────────────────────────────────────────── -->
+<div class="main" id="mode2Main" style="display:none">
+
+  <!-- CONTROLLER SIDEBAR -->
+  <div class="sidebar">
+
+    <div class="section-label">Controller</div>
+
+    <div class="field">
+      <label>Brand</label>
+      <select id="ctrlBrand" onchange="onCtrlBrandChange()">
+        <option value="kulp">Kulp</option>
+        <option value="falcon">Falcon</option>
+        <option value="genius">Genius</option>
+        <option value="aldrick">Aldrick / Baldrick</option>
+      </select>
+    </div>
+
+    <div class="field">
+      <label>Model</label>
+      <select id="ctrlModel" onchange="onCtrlModelChange()"><!-- populated by JS --></select>
+    </div>
+
+    <div id="ctrlSpecSummary"></div>
+
+    <div class="section-label">Pixel Settings</div>
+
+    <div class="field">
+      <label>Pixel Supply Voltage</label>
+      <div style="display:flex; gap:8px; margin-top:2px;">
+        <label style="flex:1; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:6px;
+          padding:9px 8px; background:var(--panel2); border:2px solid var(--accent);
+          border-radius:7px; font-weight:700; color:var(--text); font-size:.9rem;" id="ctrlVolt12Label">
+          <input type="radio" name="ctrlVoltage" value="12" checked onchange="onCtrlVoltageChange()" style="accent-color:var(--accent);">
+          12V
+        </label>
+        <label style="flex:1; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:6px;
+          padding:9px 8px; background:var(--panel2); border:2px solid var(--border);
+          border-radius:7px; font-weight:700; color:var(--muted); font-size:.9rem;" id="ctrlVolt5Label">
+          <input type="radio" name="ctrlVoltage" value="5" onchange="onCtrlVoltageChange()" style="accent-color:var(--accent);">
+          5V
+        </label>
+      </div>
+    </div>
+
+    <div class="field">
+      <label>Pixel Construction</label>
+      <div style="display:flex; gap:8px; margin-top:2px;">
+        <label style="flex:1; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:6px;
+          padding:9px 8px; background:var(--panel2); border:2px solid var(--accent);
+          border-radius:7px; font-weight:700; color:var(--text); font-size:.85rem;" id="ctrlPixResistorLabel">
+          <input type="radio" name="ctrlPixType" value="resistor" checked onchange="onCtrlPixTypeChange()" style="accent-color:var(--accent);">
+          Resistor
+        </label>
+        <label style="flex:1; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:6px;
+          padding:9px 8px; background:var(--panel2); border:2px solid var(--border);
+          border-radius:7px; font-weight:700; color:var(--muted); font-size:.85rem;" id="ctrlPixRegulatedLabel">
+          <input type="radio" name="ctrlPixType" value="regulated" onchange="onCtrlPixTypeChange()" style="accent-color:var(--accent);">
+          Regulated
+        </label>
+      </div>
+    </div>
+
+    <div class="field">
+      <label>Watts per Pixel at 100% White</label>
+      <input type="number" id="ctrlWattsPerPixel" value="0.60" min="0.01" max="5" step="0.01">
+    </div>
+
+    <div class="field">
+      <label>Brightness Level</label>
+      <div class="slider-wrap">
+        <input type="range" id="ctrlBrightness" min="1" max="100" value="100"
+          oninput="document.getElementById('ctrlBrightnessVal').textContent=this.value+'%'">
+        <div class="slider-val" id="ctrlBrightnessVal">100%</div>
+      </div>
+    </div>
+
+    <div class="field">
+      <label>Real World Usage (RWU) Factor
+        <span style="font-size:.72rem; color:var(--muted); font-weight:400;">(actual vs rated draw)</span>
+      </label>
+      <div class="slider-wrap">
+        <input type="range" id="ctrlRwuFactor" min="45" max="100" value="80"
+          oninput="document.getElementById('ctrlRwuFactorVal').textContent=this.value+'%'">
+        <div class="slider-val" id="ctrlRwuFactorVal">80%</div>
+      </div>
+      <div style="font-size:.72rem; color:var(--muted); margin-top:5px; line-height:1.55;
+        padding:5px 8px; background:rgba(79,142,247,.05); border-radius:5px;">
+        WS2811 at 100% white typically draws <strong style="color:var(--text)">70–85%</strong>
+        of theoretical max. 80% &#8776; <strong style="color:var(--text)">4A per 100 px</strong>
+        at 12V. RWU figures are shown as guidance only &mdash; all safety calcs stay at theoretical.
+      </div>
+    </div>
+
+    <div class="section-label" style="margin-top:16px;">Port Pixel Assignment</div>
+
+    <!-- 3-way mode selector -->
+    <div class="field">
+      <label>Assignment Mode</label>
+      <div style="display:flex; gap:6px; margin-top:2px;">
+        <label style="flex:1; cursor:pointer; display:flex; align-items:center; justify-content:center;
+          padding:8px 4px; background:var(--panel2); border:2px solid var(--accent);
+          border-radius:7px; font-weight:600; color:var(--text); font-size:.78rem; text-align:center;"
+          id="ctrlModeUniformLabel">
+          <input type="radio" name="ctrlPixMode" value="uniform" checked
+            onchange="buildCtrlBankInputs()" style="display:none">Uniform
+        </label>
+        <label style="flex:1; cursor:pointer; display:flex; align-items:center; justify-content:center;
+          padding:8px 4px; background:var(--panel2); border:2px solid var(--border);
+          border-radius:7px; font-weight:600; color:var(--muted); font-size:.78rem; text-align:center;"
+          id="ctrlModePerBankLabel">
+          <input type="radio" name="ctrlPixMode" value="bank"
+            onchange="buildCtrlBankInputs()" style="display:none">Per Bank
+        </label>
+        <label style="flex:1; cursor:pointer; display:flex; align-items:center; justify-content:center;
+          padding:8px 4px; background:var(--panel2); border:2px solid var(--border);
+          border-radius:7px; font-weight:600; color:var(--muted); font-size:.78rem; text-align:center;"
+          id="ctrlModePerPortLabel">
+          <input type="radio" name="ctrlPixMode" value="port"
+            onchange="buildCtrlBankInputs()" style="display:none">Per Port
+        </label>
+      </div>
+    </div>
+
+    <!-- Default / uniform pixel count (always visible as fallback reference) -->
+    <div class="field" id="ctrlUniformField">
+      <label id="ctrlUniformFieldLabel">Pixels per Port (all ports)</label>
+      <input type="number" id="ctrlPixPerPort" value="100" min="0" max="5000"
+        onchange="buildCtrlBankInputs()">
+    </div>
+
+    <!-- Per-bank or per-port dynamic inputs -->
+    <div id="ctrlBankInputContainer"></div>
+
+    <div class="section-label">DC Wiring</div>
+
+    <!-- PSU to Controller Wire (PSU output → controller power input terminal) -->
+    <div class="field" style="margin-bottom:8px;">
+      <label style="cursor:pointer; display:flex; align-items:center; gap:8px;">
+        <input type="checkbox" id="ctrlPigtailEnabled" onchange="toggleCtrlPigtail()"
+          style="width:15px;height:15px;accent-color:var(--accent);cursor:pointer;">
+        <span style="color:var(--text); font-weight:600;">Include PSU to Controller Wire</span>
+      </label>
+      <div style="font-size:.73rem; color:var(--muted); margin-top:3px; margin-left:23px;">
+        Wire from each PSU output terminal to controller power input
+      </div>
+    </div>
+    <div id="ctrlPigtailFields" style="display:none; padding:10px 12px;
+      background:rgba(79,142,247,.06); border:1px solid rgba(79,142,247,.2);
+      border-radius:7px; margin-bottom:12px;">
+      <div class="field" style="margin-bottom:10px;">
+        <label>PSU to Controller Wire Gauge</label>
+        <select id="ctrlPigtailGauge">
+          <option value="12">12 AWG (20A)</option>
+          <option value="14">14 AWG (15A)</option>
+          <option value="16">16 AWG (13A)</option>
+          <option value="18" selected>18 AWG (7A) — typical short run</option>
+          <option value="20">20 AWG (5A)</option>
+        </select>
+      </div>
+      <div class="field" style="margin-bottom:0;">
+        <label>PSU to Controller Wire Length (feet)</label>
+        <input type="number" id="ctrlPigtailLen" value="1.5" min="0.1" step="0.5">
+      </div>
+    </div>
+
+    <!-- Controller to Extension Wire (controller output port → extension cable connector) -->
+    <div class="field" style="margin-bottom:8px;">
+      <label style="cursor:pointer; display:flex; align-items:center; gap:8px;">
+        <input type="checkbox" id="ctrlCtoEEnabled" onchange="toggleCtrlCtoE()"
+          style="width:15px;height:15px;accent-color:var(--accent);cursor:pointer;">
+        <span style="color:var(--text); font-weight:600;">Include Controller to Extension Wire</span>
+      </label>
+      <div style="font-size:.73rem; color:var(--muted); margin-top:3px; margin-left:23px;">
+        Short pigtail from controller output port to extension cable connector
+      </div>
+    </div>
+    <div id="ctrlCtoEFields" style="display:none; padding:10px 12px;
+      background:rgba(124,58,237,.06); border:1px solid rgba(124,58,237,.2);
+      border-radius:7px; margin-bottom:12px;">
+      <div class="field" style="margin-bottom:10px;">
+        <label>Controller to Extension Wire Gauge</label>
+        <select id="ctrlCtoEGauge">
+          <option value="12">12 AWG (20A)</option>
+          <option value="14">14 AWG (15A)</option>
+          <option value="16">16 AWG (13A)</option>
+          <option value="18" selected>18 AWG (7A) — typical port pigtail</option>
+          <option value="20">20 AWG (5A)</option>
+        </select>
+      </div>
+      <div class="field" style="margin-bottom:0;">
+        <label>Controller to Extension Wire Length (feet)</label>
+        <input type="number" id="ctrlCtoELen" value="1" min="0.1" step="0.5">
+      </div>
+    </div>
+
+    <!-- Extension wire (extension cable connector → first pixel) -->
+    <div class="field">
+      <label>Extension Wire Gauge
+        <span style="font-size:.72rem; color:var(--muted); font-weight:400;">(connector → first pixel)</span>
+      </label>
+      <select id="ctrlExtGauge">
+        <option value="10">10 AWG (30A) — heavy / long runs</option>
+        <option value="12" selected>12 AWG (20A) — recommended</option>
+        <option value="14">14 AWG (15A)</option>
+        <option value="16">16 AWG (13A)</option>
+        <option value="18">18 AWG (7A) — short runs only</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>Extension Wire Length (feet)</label>
+      <input type="number" id="ctrlExtLen" value="10" min="0" step="1">
+    </div>
+
+    <div class="section-label">Power Injection</div>
+
+    <div id="ctrlMinVNote" style="padding:7px 10px; background:rgba(79,142,247,.07);
+      border-left:3px solid var(--accent); border-radius:0 6px 6px 0;
+      font-size:.75rem; color:var(--muted); line-height:1.6; margin-bottom:12px;">
+      Min pixel voltage: <strong style="color:var(--text)" id="ctrlMinVDisplay">11.0V</strong>
+      — <span id="ctrlMinVReason">resistor pixels need ≥11.0V for consistent colour</span>
+    </div>
+
+    <div class="field">
+      <label>Pixel Spacing (inches between pixels)</label>
+      <select id="ctrlDensity" onchange="toggleCtrlCustomSpacing()">
+        <option value="2">2&Prime; spacing — strip / dense nodes</option>
+        <option value="4" selected>4&Prime; spacing — common bullet pixel</option>
+        <option value="6">6&Prime; spacing — bullet / roofline</option>
+        <option value="8">8&Prime; spacing — sparse outdoor pixel</option>
+        <option value="12">12&Prime; spacing — 1 per foot, mega-tree</option>
+        <option value="custom">Custom — enter below</option>
+      </select>
+    </div>
+    <div class="field" id="ctrlCustomSpacingField" style="display:none;">
+      <label>Custom Pixel Spacing (inches)</label>
+      <input type="number" id="ctrlCustomSpacing" value="4" min="0.1" step="0.1">
+    </div>
+
+    <div class="field">
+      <label>Injection Wire Gauge — Mid-Run Taps</label>
+      <select id="ctrlInjGauge">
+        <option value="10">10 AWG (30A)</option>
+        <option value="12">12 AWG (20A)</option>
+        <option value="14">14 AWG (15A)</option>
+        <option value="16">16 AWG (13A)</option>
+        <option value="18" selected>18 AWG (7A)</option>
+      </select>
+    </div>
+
+    <div class="section-label">Power Supply</div>
+
+    <div class="field">
+      <label>Power Supply Model</label>
+      <select id="ctrlPsModel"><!-- populated by onCtrlVoltageChange() --></select>
+    </div>
+
+    <div class="field">
+      <label>PS Derate Factor</label>
+      <select id="ctrlPsDerate">
+        <option value="0.8" selected>80% — recommended</option>
+        <option value="0.9">90% — cool / ventilated</option>
+        <option value="1.0">100% — not recommended</option>
+      </select>
+    </div>
+
+    <div class="section-label">AC Settings</div>
+
+    <div class="field">
+      <label>AC Mains Voltage</label>
+      <select id="ctrlAcVoltage">
+        <option value="120" selected>120V — North America</option>
+        <option value="240">240V — Europe / UK / AU</option>
+      </select>
+    </div>
+
+    <div class="field">
+      <label>Circuit Breaker Rating</label>
+      <select id="ctrlBreakerAmps">
+        <option value="15" selected>15A — standard</option>
+        <option value="20">20A — utility / kitchen</option>
+      </select>
+    </div>
+
+    <div class="field">
+      <label>AC Safety Factor</label>
+      <select id="ctrlAcSafety">
+        <option value="0.8" selected>80% — NEC 210.20</option>
+        <option value="0.75">75% — conservative</option>
+        <option value="0.5">50% — very conservative</option>
+      </select>
+    </div>
+
+    <button class="calc-btn" onclick="calculateController()">&#9889; Calculate</button>
+  </div><!-- /sidebar -->
+
+  <!-- CONTROLLER RESULTS -->
+  <div class="content" id="ctrlResults">
+    <div class="empty">
+      <div class="icon">&#127917;</div>
+      <p>Select your controller model and pixel settings, then click <strong>Calculate</strong> to see the complete bank-by-bank power plan.</p>
+    </div>
+  </div>
+
+</div><!-- /mode2Main -->
+
+<script>
+// ── Constants ──────────────────────────────────────────────────────────────
+const PS_MODELS = {
+  // ── 12V ──────────────────────────────────────────────────────────────────
+  lrs350:    { name: 'MeanWell LRS-350-12', watts: 350, volts: 12, amps: 29.2, efficiency: 0.891 },
+  lrs200_12: { name: 'MeanWell LRS-200-12', watts: 204, volts: 12, amps: 17.0, efficiency: 0.880 },
+  lrs100_12: { name: 'MeanWell LRS-100-12', watts: 120, volts: 12, amps: 10.0, efficiency: 0.865 },
+  se600_12:  { name: 'MeanWell SE-600-12',  watts: 600, volts: 12, amps: 50.0, efficiency: 0.900 },
+  // ── 5V ───────────────────────────────────────────────────────────────────
+  lrs100_5:  { name: 'MeanWell LRS-100-5',  watts: 100, volts: 5,  amps: 20.0, efficiency: 0.860 },
+  lrs200_5:  { name: 'MeanWell LRS-200-5',  watts: 180, volts: 5,  amps: 36.0, efficiency: 0.878 },
+  se200_5:   { name: 'MeanWell SE-200-5',   watts: 200, volts: 5,  amps: 40.0, efficiency: 0.880 },
+  rsp320_5:  { name: 'MeanWell RSP-320-5',  watts: 320, volts: 5,  amps: 64.0, efficiency: 0.885 },
+};
+
+// Resistance in ohms per foot for common gauges (bare copper, 25°C)
+const WIRE_RES = { 10: 0.001000, 12: 0.001588, 14: 0.002525, 16: 0.004016, 18: 0.006385, 20: 0.010150 };
+// NEC ampacity (PVC 60°C, open air)
+const WIRE_AMP = { 10: 30, 12: 20, 14: 15, 16: 13, 18: 7, 20: 5 };
+
+// Voltage-specific defaults
+const VOLT_DEFAULTS = {
+  12: {
+    wattsPerPixel: 0.60, defaultPS: 'lrs350',
+    label: '12V WS2811',
+    note: '0.60 W/pixel at 100% white (50mA &times; 12V) — most common for WS2811',
+    resistor:  { minV: 11.0, recommend: '11.0V — resistor pixels lose colour accuracy below this' },
+    regulated: { minV:  9.0, recommend: '9.0V — constant-current driver holds output down to this level' },
+  },
+   5: {
+    wattsPerPixel: 0.30, defaultPS: 'lrs100_5',
+    label: '5V WS2812B',
+    note: '0.30 W/pixel at 100% white (60mA &times; 5V) — most common for WS2812B',
+    resistor:  { minV: 4.5, recommend: '4.5V — standard minimum for consistent colour' },
+    regulated: { minV: 3.5, recommend: '3.5V — regulated 5V nodes hold output to this level' },
+  },
+};
+
+// ── UI helpers ─────────────────────────────────────────────────────────────
+document.getElementById('brightness').addEventListener('input', function() {
+  document.getElementById('brightnessVal').textContent = this.value + '%';
+});
+document.getElementById('density').addEventListener('change', function() {
+  document.getElementById('customSpacingField').style.display =
+    this.value === 'custom' ? 'block' : 'none';
+});
+function togglePigtail() {
+  document.getElementById('pigtailFields').style.display =
+    document.getElementById('pigtailEnabled').checked ? 'block' : 'none';
+}
+function toggleCtrlPigtail() {
+  document.getElementById('ctrlPigtailFields').style.display =
+    document.getElementById('ctrlPigtailEnabled').checked ? 'block' : 'none';
+}
+function toggleCtrlCtoE() {
+  document.getElementById('ctrlCtoEFields').style.display =
+    document.getElementById('ctrlCtoEEnabled').checked ? 'block' : 'none';
+}
+function toggleCtrlCustomSpacing() {
+  const v = document.getElementById('ctrlDensity').value;
+  document.getElementById('ctrlCustomSpacingField').style.display = v === 'custom' ? 'block' : 'none';
+}
+function updateCtrlMinV() {
+  const volts = getCtrlVolts();
+  const type  = getCtrlPixType();
+  const def   = VOLT_DEFAULTS[volts] && VOLT_DEFAULTS[volts][type];
+  if (!def) return;
+  document.getElementById('ctrlMinVDisplay').textContent = def.minV + 'V';
+  document.getElementById('ctrlMinVReason').textContent  = def.recommend;
+}
+
+function getPixelVolts() {
+  return parseInt(document.querySelector('input[name="pixelVoltage"]:checked').value);
+}
+function getPixelType() {
+  return document.querySelector('input[name="pixelType"]:checked').value;  // 'resistor' | 'regulated'
+}
+
+function onPixelTypeChange() {
+  const volts = getPixelVolts();
+  const type  = getPixelType();
+  const typeDef = VOLT_DEFAULTS[volts][type];
+  const isReg = type === 'regulated';
+
+  // Style construction toggle
+  document.getElementById('ptResistorLabel').style.borderColor = !isReg ? 'var(--accent)' : 'var(--border)';
+  document.getElementById('ptResistorLabel').style.color       = !isReg ? 'var(--text)'   : 'var(--muted)';
+  document.getElementById('ptRegulatedLabel').style.borderColor = isReg ? 'var(--accent)' : 'var(--border)';
+  document.getElementById('ptRegulatedLabel').style.color       = isReg ? 'var(--text)'   : 'var(--muted)';
+
+  // Update min voltage
+  document.getElementById('minVoltage').value = typeDef.minV;
+  document.getElementById('minVRecommend').textContent = typeDef.recommend;
+
+  // Update pixel type note
+  document.getElementById('pixelTypeText').innerHTML = isReg
+    ? `<strong style="color:var(--ok)">Regulated (constant current):</strong> Driver IC (e.g. BCR421U) holds brightness constant
+       down to <strong style="color:var(--text)">${typeDef.minV}V</strong>.
+       <strong style="color:var(--ok)">Wider voltage budget &mdash; more pixels per injection segment.</strong>`
+    : `<strong>Resistor-limited (standard):</strong> Fixed resistor sets current.
+       Brightness &amp; colour shift below <strong style="color:var(--text)">${typeDef.minV}V</strong>.
+       Tighter voltage budget than regulated nodes.`;
+}
+
+function onVoltageChange() {
+  const volts = getPixelVolts();
+  const def = VOLT_DEFAULTS[volts];
+
+  // Style the voltage radio label buttons
+  document.getElementById('volt12label').style.borderColor = volts === 12 ? 'var(--accent)' : 'var(--border)';
+  document.getElementById('volt12label').style.color       = volts === 12 ? 'var(--text)'   : 'var(--muted)';
+  document.getElementById('volt5label').style.borderColor  = volts === 5  ? 'var(--accent)' : 'var(--border)';
+  document.getElementById('volt5label').style.color        = volts === 5  ? 'var(--text)'   : 'var(--muted)';
+
+  // Update watts/pixel default and note
+  document.getElementById('wattsPerPixel').value = def.wattsPerPixel;
+  document.getElementById('wppText').innerHTML =
+    `Most common for <strong style="color:var(--text)">${def.label}</strong>: ` +
+    `<strong style="color:var(--accent)">${def.wattsPerPixel} W/pixel</strong> at 100% white. ` +
+    def.note.replace(/^.*?\(/, '(');
+
+  // Rebuild PS model dropdown for this voltage
+  const sel = document.getElementById('psModel');
+  sel.innerHTML = '';
+  Object.entries(PS_MODELS)
+    .filter(([, ps]) => ps.volts === volts)
+    .forEach(([key, ps]) => {
+      const opt = document.createElement('option');
+      opt.value = key;
+      opt.textContent = `${ps.name} — ${ps.watts}W / ${ps.volts}V / ${ps.amps}A`;
+      if (key === def.defaultPS) opt.selected = true;
+      sel.appendChild(opt);
+    });
+
+  // Min voltage update handled by pixel type change (which reads current voltage)
+  onPixelTypeChange();
+}
+
+function v(id) { return document.getElementById(id).value; }
+function vn(id) { return parseFloat(document.getElementById(id).value); }
+
+// ── Main calculation ───────────────────────────────────────────────────────
+let voltagDropChart = null;
+
+function calculate() {
+  const numPixels     = Math.round(vn('numPixels'));
+  const brightness    = vn('brightness') / 100;
+  const psDerate      = vn('psDerate');
+  const acSafety      = vn('acSafety');
+  const acV           = vn('acVoltage');
+  const breakerA      = vn('breakerAmps');
+  const maxRunFt      = vn('maxRunFeet');
+  const minV          = vn('minVoltage');
+  const injGauge      = parseInt(v('injGauge'));
+  const ps            = PS_MODELS[v('psModel')];
+  const VOLTS         = getPixelVolts();           // 5 or 12
+  const pixelType     = getPixelType();            // 'resistor' | 'regulated'
+  const wattsPerPixel = vn('wattsPerPixel');       // user-specified W/pixel at 100%
+
+  // Pigtail (optional)
+  const pigtailOn     = document.getElementById('pigtailEnabled').checked;
+  const pigtailGauge  = parseInt(v('pigtailGauge'));
+  const pigtailLen    = pigtailOn ? vn('pigtailLen') : 0;
+
+  // Extension wire
+  const extGauge      = parseInt(v('extensionGauge'));
+  const extLen        = vn('extensionLen');
+
+  // Pixel spacing in feet
+  let spacingFt;
+  if (v('density') === 'custom') {
+    spacingFt = vn('customSpacing') / 12;
+  } else {
+    const pxPerM = parseInt(v('density'));
+    spacingFt = 3.28084 / pxPerM;
+  }
+  const totalRunFt = numPixels * spacingFt;
+
+  // ── DC calculations ──────────────────────────────────────────────────────
+  // ampsPerPixel derived from user W/pixel input and selected voltage
+  const ampsPerPixel = (wattsPerPixel * brightness) / VOLTS;
+  const totalAmpsDC  = numPixels * ampsPerPixel;
+  const totalWattsDC = totalAmpsDC * VOLTS;   // = numPixels * wattsPerPixel * brightness
+
+  // PS sizing with derate
+  const usableWatts  = ps.watts * psDerate;
+  const usableAmps   = ps.amps * psDerate;
+  const numPS        = Math.ceil(totalWattsDC / usableWatts);
+  const wattsPerPS   = totalWattsDC / numPS;
+  const ampsPerPS    = wattsPerPS / VOLTS;
+
+  // ── AC calculations ──────────────────────────────────────────────────────
+  const acDrawPerPS  = ps.watts / ps.efficiency;
+  const acAmpsPerPS  = acDrawPerPS / acV;
+  const totalAC_W    = numPS * acDrawPerPS;
+  const totalAC_A    = totalAC_W / acV;
+
+  const usableCircuitA = breakerA * acSafety;
+  const usableCircuitW = usableCircuitA * acV;
+  const psPerCircuit   = Math.floor(usableCircuitA / acAmpsPerPS);
+  const numCircuits    = Math.ceil(numPS / Math.max(1, psPerCircuit));
+
+  // ── External wiring voltage drops (pigtail + extension) ──────────────────
+  // Both carry the full PS output current (ampsPerPS) to the strip start.
+  const pigtailRes  = pigtailOn ? WIRE_RES[pigtailGauge] : 0;
+  const extRes      = WIRE_RES[extGauge];
+  const vdropPigtail   = ampsPerPS * pigtailRes   * 2 * pigtailLen;
+  const vdropExtension = ampsPerPS * extRes        * 2 * extLen;
+  const vAtStrip    = Math.max(0, VOLTS - vdropPigtail - vdropExtension);
+  const vBudgetStrip = Math.max(0, vAtStrip - minV);
+  const totalBudget  = Math.max(0, VOLTS - minV);   // headroom from nominal to min (e.g. 12-11=1V)
+
+  // Maximum extension length before the strip voltage budget is fully consumed
+  // Solve:  ampsPerPS * extRes * 2 * maxExtLen = totalBudget - vdropPigtail
+  const vBudgetForExt = Math.max(0, totalBudget - vdropPigtail);
+  const maxExtLen = (ampsPerPS > 0 && extRes > 0)
+    ? vBudgetForExt / (ampsPerPS * extRes * 2)
+    : Infinity;
+
+  // Wire ampacity checks
+  const extAmpacity     = WIRE_AMP[extGauge];
+  const injAmpacity     = WIRE_AMP[injGauge];
+  const pigtailAmpacity = pigtailOn ? WIRE_AMP[pigtailGauge] : Infinity;
+  const extOk           = ampsPerPS <= extAmpacity;
+  const pigtailOk       = ampsPerPS <= pigtailAmpacity;
+
+  // ── Injection spacing — N² tapered current model ─────────────────────────
+  // In a run of N pixels fed from one end, current at any point tapers.
+  // Voltage drop at the farthest pixel ≈ ampsPerPixel × injResPerFt × spacingFt × N(N-1)/2
+  // For large N: ≈ ampsPerPixel × injResPerFt × spacingFt × N²/2  (conservative)
+  // Solving for N: N = sqrt(vBudgetStrip / (ampsPerPixel × injResPerFt × spacingFt))
+  const injResPerFt = WIRE_RES[injGauge];
+
+  // Voltage-drop limited segment size (N² taper model)
+  const pixPerSegVdrop = vBudgetStrip > 0 && ampsPerPixel > 0 && spacingFt > 0
+    ? Math.floor(Math.sqrt(vBudgetStrip / (ampsPerPixel * injResPerFt * spacingFt)))
+    : 0;
+
+  // Ampacity limited segment size — injection wire can only carry so many pixels' worth of current
+  const pixPerSegAmp = ampsPerPixel > 0
+    ? Math.floor(injAmpacity / ampsPerPixel)
+    : 999999;
+
+  // Final segment size is the minimum of both constraints
+  const pixPerSeg = pixPerSegVdrop > 0
+    ? Math.max(1, Math.min(pixPerSegVdrop, pixPerSegAmp))
+    : 0;
+  const injLimitedBy = (pixPerSegVdrop > 0 && pixPerSegAmp < pixPerSegVdrop) ? 'wire ampacity' : 'voltage drop';
+
+  const segLenFt     = pixPerSeg * spacingFt;
+  const injTapAmps   = pixPerSeg * ampsPerPixel;
+  const injTapOk     = injTapAmps <= injAmpacity;   // always true now; kept as safety check
+  const numInjPoints = pixPerSeg > 0 ? Math.max(0, Math.ceil(numPixels / pixPerSeg) - 1) : 0;
+
+  // ── Build voltage-drop chart data (injection segment, starting at vAtStrip) ──
+  // Shows voltage at the farthest pixel as segment length increases,
+  // using the N² taper model for each wire gauge.
+  const gauges = [10, 12, 14, 16, 18];
+  const labels = [];
+  for (let f = 0; f <= maxRunFt; f += Math.max(1, Math.round(maxRunFt / 60))) labels.push(f);
+  if (labels[labels.length - 1] !== maxRunFt) labels.push(maxRunFt);
+
+  const colors = ['#22c55e','#4f8ef7','#f59e0b','#a78bfa','#f43f5e'];
+  const datasets = gauges.map((g, i) => ({
+    label: `${g} AWG injection`,
+    data: labels.map(ft => {
+      // ft = run length from injection point
+      // N = ft / spacingFt pixels in segment
+      const N = spacingFt > 0 ? ft / spacingFt : 0;
+      // Vdrop at farthest pixel = ampsPerPixel * R/ft * spacingFt * N * (N-1) / 2
+      // simplified: ampsPerPixel * R/ft * spacingFt * N²/2
+      const vdrop = ampsPerPixel * WIRE_RES[g] * spacingFt * N * N / 2;
+      return Math.max(0, vAtStrip - vdrop).toFixed(3);
+    }),
+    borderColor: colors[i],
+    backgroundColor: 'transparent',
+    borderWidth: g === injGauge ? 3 : 1.5,
+    borderDash: g === injGauge ? [] : [4,3],
+    tension: 0.2,
+    pointRadius: 0,
+  }));
+  datasets.push({
+    label: `Min (${minV}V)`,
+    data: labels.map(() => minV),
+    borderColor: '#ef4444',
+    borderDash: [6, 4],
+    borderWidth: 1.5,
+    backgroundColor: 'transparent',
+    pointRadius: 0,
+  });
+
+  // ── Render HTML ──────────────────────────────────────────────────────────
+  // External wiring summary badge
+  const extBadge = extOk
+    ? `<span class="badge badge-ok">OK</span>`
+    : `<span class="badge badge-danger">OVERLOADED — increase gauge</span>`;
+  const pigtailBadge = !pigtailOn ? '' : pigtailOk
+    ? `<span class="badge badge-ok">OK</span>`
+    : `<span class="badge badge-danger">OVERLOADED</span>`;
+
+  const circuitTable = (() => {
+    let rows = '';
+    for (let c = 1; c <= numCircuits; c++) {
+      const psStart = (c - 1) * Math.max(1, psPerCircuit) + 1;
+      const psEnd   = Math.min(c * Math.max(1, psPerCircuit), numPS);
+      const count   = psEnd - psStart + 1;
+      const loadA   = count * acAmpsPerPS;
+      const loadW   = count * acDrawPerPS;
+      const pct     = ((loadA / usableCircuitA) * 100).toFixed(0);
+      const status  = loadA <= usableCircuitA
+        ? `<span class="badge badge-ok">${pct}% loaded</span>`
+        : `<span class="badge badge-danger">OVER LIMIT</span>`;
+      rows += `<tr>
+        <td>Circuit ${c}</td>
+        <td>${count} × ${ps.name.replace('MeanWell ','')}</td>
+        <td>${loadA.toFixed(2)}A / ${usableCircuitA.toFixed(1)}A max</td>
+        <td>${loadW.toFixed(0)}W</td>
+        <td>${status}</td>
+      </tr>`;
+    }
+    return rows;
+  })();
+
+  // Injection advice
+  const injAdvice = (() => {
+    if (vBudgetStrip <= 0) {
+      const fixes = [];
+      if (isFinite(maxExtLen) && maxExtLen >= 0) {
+        fixes.push(`Shorten extension to <strong style="color:var(--text)">&le;${maxExtLen.toFixed(1)} ft</strong> (max for ${extGauge} AWG at this load)`);
+      }
+      // What gauge would keep the same extension length?
+      const neededRes = (totalBudget - vdropPigtail) / (ampsPerPS * 2 * extLen);
+      const suggestGauge = [10, 12, 14, 16].find(g => WIRE_RES[g] <= neededRes);
+      if (suggestGauge && suggestGauge < extGauge) {
+        fixes.push(`Upgrade extension to <strong style="color:var(--text)">${suggestGauge} AWG</strong> (resistance low enough for this run)`);
+      }
+      fixes.push(`Increase <strong style="color:var(--text)">Min Acceptable Voltage</strong> threshold to allow more budget`);
+      fixes.push(`Place the power supply closer to the pixel run (shorter extension)`);
+      return `<div style="padding:12px 14px; background:rgba(239,68,68,.08); border:1px solid rgba(239,68,68,.3); border-radius:8px;">
+        <div style="color:var(--danger); font-weight:700; margin-bottom:8px;">&#9888; External wiring consumes the entire voltage budget</div>
+        <div style="font-size:.8rem; color:var(--muted); line-height:1.8;">
+          The external wiring drops <strong style="color:var(--text)">${(vdropPigtail + vdropExtension).toFixed(3)}V</strong>
+          but your total budget is only <strong style="color:var(--text)">${totalBudget.toFixed(3)}V</strong>
+          (${VOLTS}V supply &minus; ${minV}V minimum).
+          There is <strong style="color:var(--danger)">no voltage margin left</strong> for the strip — pixels will run below minimum spec at any load.
+          <br><br><strong style="color:var(--text);">To fix (try any of these):</strong>
+          <ul style="margin:6px 0 0 16px; line-height:2;">
+            ${fixes.map(f => `<li>${f}</li>`).join('')}
+          </ul>
+        </div>
+      </div>`;
+    }
+    if (pixPerSeg <= 0) {
+      return `<div style="color:var(--danger); padding:10px 0;">&#9888; Cannot calculate injection — check inputs.</div>`;
+    }
+    if (numInjPoints === 0) {
+      return `<div style="padding:10px 12px; background:rgba(34,197,94,.07); border:1px solid rgba(34,197,94,.25); border-radius:8px; font-size:.88rem; line-height:1.7;">
+        <span style="color:var(--ok); font-weight:700;">&#10003; No mid-run power injection required.</span><br>
+        <span style="color:var(--muted)">All ${numPixels} pixels fit within one segment of
+        <strong style="color:var(--text)">${pixPerSeg} px max</strong> on ${injGauge} AWG injection wire
+        (${segLenFt.toFixed(1)} ft segment, ${injTapAmps.toFixed(2)}A tap &mdash; limited by <em>${injLimitedBy}</em>).</span>
+      </div>`;
+    }
+    let html = `<ul class="inj-list">`;
+    for (let i = 0; i <= numInjPoints; i++) {
+      const startPx  = i * pixPerSeg + 1;
+      const endPx    = Math.min((i + 1) * pixPerSeg, numPixels);
+      const atFt     = (i * segLenFt).toFixed(1);
+      const segCount = endPx - startPx + 1;
+      const segAmps  = segCount * ampsPerPixel;
+      html += `<li>
+        <span class="inj-label">&#9889; ${i === 0 ? 'Start feed' : 'Injection Point ' + i} &mdash; at ${atFt} ft along strip</span>
+        <span class="inj-val">Pixels ${startPx}–${endPx} &nbsp;(${segCount} px / ${segAmps.toFixed(2)}A)</span>
+      </li>`;
+    }
+    html += `</ul>`;
+    html += `<div style="margin-top:12px; padding:10px 12px; background:var(--panel2); border-radius:7px; font-size:.8rem; color:var(--muted); line-height:1.75;">
+      <strong style="color:var(--text);">Injection summary:</strong>
+      ${numInjPoints} mid-run injection point${numInjPoints !== 1 ? 's' : ''} needed &mdash;
+      inject every <strong style="color:var(--text)">${pixPerSeg} pixels (~${segLenFt.toFixed(1)} ft)</strong>
+      using <strong style="color:var(--text)">${injGauge} AWG</strong> wire (${injAmpacity}A rated).
+      Each injection tap carries <strong style="color:var(--text)">${injTapAmps.toFixed(2)}A</strong>
+      &mdash; segment size limited by <strong style="color:var(--text)">${injLimitedBy}</strong>
+      (vdrop limit: ${pixPerSegVdrop} px &bull; ampacity limit: ${pixPerSegAmp} px).
+      <br><strong style="color:var(--text); display:block; margin-top:6px;">How to connect:</strong>
+      Run a ${injGauge} AWG 2-conductor wire from the power supply (or distribution bus) to each injection point.
+      At each tap, solder or use a terminal block to connect +${VOLTS}V and GND directly to the strip's power rails.
+      All power supplies must share a common GND if running a shared data line.
+    </div>`;
+    return html;
+  })();
+
+  document.getElementById('results').innerHTML = `
+
+    <!-- ── OVERVIEW CARDS ── -->
+    <div class="results-grid">
+      <div class="card">
+        <div class="card-title">Total Pixels</div>
+        <div class="card-value">${numPixels.toLocaleString()}</div>
+        <div class="card-unit">${VOLTS}V addressable pixels</div>
+        <div class="card-detail">
+          <strong>Run Length:</strong> ${totalRunFt.toFixed(1)} ft (${(totalRunFt/3.28084).toFixed(1)} m)<br>
+          <strong>Spacing:</strong> ${(spacingFt * 12).toFixed(2)} in / pixel<br>
+          <strong>Brightness:</strong> ${Math.round(brightness * 100)}%<br>
+          <strong>Construction:</strong>
+          ${pixelType === 'regulated'
+            ? `<span style="color:var(--ok)">Regulated (constant current)</span> &mdash; min ${minV}V`
+            : `<span style="color:var(--muted)">Resistor-limited (standard)</span> &mdash; min ${minV}V`}
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">DC Power Required</div>
+        <div class="card-value">${totalWattsDC.toFixed(1)}</div>
+        <div class="card-unit">Watts at ${VOLTS}V DC</div>
+        <div class="card-detail">
+          <strong>Total Current:</strong> ${totalAmpsDC.toFixed(2)} A DC<br>
+          <strong>Per Pixel @ ${Math.round(brightness*100)}%:</strong> ${(ampsPerPixel * 1000).toFixed(1)} mA / ${(ampsPerPixel * VOLTS).toFixed(3)} W<br>
+          <strong>Per Pixel @ 100%:</strong> ${(wattsPerPixel/VOLTS*1000).toFixed(1)} mA / ${wattsPerPixel.toFixed(3)} W<br>
+          <strong>Supply Voltage:</strong> ${VOLTS}V DC nominal
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">AC Power Draw</div>
+        <div class="card-value">${totalAC_W.toFixed(0)}</div>
+        <div class="card-unit">Watts AC (at ${acV}V mains)</div>
+        <div class="card-detail">
+          <strong>Total AC Current:</strong> ${totalAC_A.toFixed(2)} A<br>
+          <strong>PS Efficiency:</strong> ${(ps.efficiency * 100).toFixed(1)}%<br>
+          <strong>Per Supply AC:</strong> ${acDrawPerPS.toFixed(1)} W / ${acAmpsPerPS.toFixed(2)} A
+        </div>
+      </div>
+
+      <div class="card ${numPS > 10 ? 'warn' : 'ok'}">
+        <div class="card-title">Power Supplies</div>
+        <div class="card-value">${numPS}</div>
+        <div class="card-unit">${ps.name}</div>
+        <div class="card-detail">
+          <strong>Rated:</strong> ${ps.watts}W / ${ps.volts}V / ${ps.amps}A<br>
+          <strong>Usable (${Math.round(psDerate*100)}% derate):</strong> ${usableWatts.toFixed(0)}W / ${usableAmps.toFixed(1)}A<br>
+          <strong>Load per PS:</strong> ${wattsPerPS.toFixed(1)}W / ${ampsPerPS.toFixed(2)}A
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">15A Circuits Required</div>
+        <div class="card-value">${numCircuits}</div>
+        <div class="card-unit">${breakerA}A breakers (${Math.round(acSafety*100)}% NEC rule)</div>
+        <div class="card-detail">
+          <strong>Usable per circuit:</strong> ${usableCircuitA.toFixed(1)}A / ${usableCircuitW.toFixed(0)}W<br>
+          <strong>PS per circuit:</strong> ${psPerCircuit > 0 ? psPerCircuit : '< 1 — needs dedicated circuit'}<br>
+          <strong>Outlet utilization:</strong> ${Math.min(100,(totalAC_A/numCircuits/usableCircuitA*100)).toFixed(0)}% avg
+        </div>
+      </div>
+
+      <div class="card ${extOk && pigtailOk ? 'ok' : 'danger'}">
+        <div class="card-title">DC Feed Chain &mdash; PS to First Pixel ${extBadge}</div>
+        <div class="card-value">${vAtStrip.toFixed(2)}V</div>
+        <div class="card-unit">Voltage arriving at pixel 1 (after external wiring losses)</div>
+        <div class="card-detail">
+          <strong>Total voltage budget (${VOLTS}V &minus; ${minV}V min):</strong> ${totalBudget.toFixed(3)}V<br>
+          <div style="margin:5px 0 5px 8px; padding:6px 10px; background:rgba(255,255,255,.04); border-left:2px solid var(--border); border-radius:0 5px 5px 0; font-size:.76rem; line-height:1.85;">
+            ${pigtailOn
+              ? `Pigtail &nbsp;(${pigtailGauge} AWG, ${pigtailLen} ft): &minus;${vdropPigtail.toFixed(3)}V &nbsp;[${totalBudget > 0 ? ((vdropPigtail/totalBudget)*100).toFixed(0) : '—'}% of budget] ${pigtailBadge}<br>`
+              : `<span style="color:var(--muted)">Pigtail: not included</span><br>`}
+            Extension (${extGauge} AWG, ${extLen} ft): &minus;${vdropExtension.toFixed(3)}V &nbsp;[${totalBudget > 0 ? ((vdropExtension/totalBudget)*100).toFixed(0) : '—'}% of budget] ${extBadge}
+          </div>
+          <strong>Remaining for strip injection:</strong>
+          <span style="color:${vBudgetStrip > 0 ? 'var(--ok)' : 'var(--danger)'}; font-weight:700;"> ${vBudgetStrip.toFixed(3)}V</span>
+          ${totalBudget > 0 ? `<span style="color:var(--muted); font-size:.75rem;"> (${((vBudgetStrip/totalBudget)*100).toFixed(0)}% of budget left)</span>` : ''}
+          ${vBudgetStrip <= 0 && isFinite(maxExtLen)
+            ? `<br><span style="color:var(--warn); font-size:.76rem;">&#9888; Max ${extGauge} AWG extension length: <strong style="color:var(--text)">${maxExtLen.toFixed(1)} ft</strong> before budget is exhausted</span>`
+            : isFinite(maxExtLen) ? `<br><span style="color:var(--muted); font-size:.76rem;">Max ${extGauge} AWG extension before budget gone: <strong style="color:var(--text)">${maxExtLen.toFixed(1)} ft</strong></span>` : ''}
+          <br><strong>Injection wire (${injGauge} AWG):</strong> ${injAmpacity}A rated &mdash; ${injTapAmps.toFixed(2)}A per tap &mdash; limited by <em>${injLimitedBy}</em>
+          ${injTapOk ? ' <span class="badge badge-ok">OK</span>' : ' <span class="badge badge-danger">OVERLOADED</span>'}
+        </div>
+      </div>
+    </div>
+
+    <!-- ── POWER SUPPLY DETAIL ── -->
+    <div class="result-section">
+      <div class="result-section-header">&#9889; Power Supply Specifications</div>
+      <div class="result-section-body">
+        <table>
+          <thead><tr>
+            <th>Supply #</th>
+            <th>Model</th>
+            <th>DC Output</th>
+            <th>Actual Load</th>
+            <th>AC Input Draw</th>
+            <th>Load %</th>
+          </tr></thead>
+          <tbody>
+            ${Array.from({length: numPS}, (_, i) => `
+            <tr>
+              <td><strong>PS ${i + 1}</strong></td>
+              <td>${ps.name}</td>
+              <td>${ps.volts}V / ${ps.amps}A / ${ps.watts}W rated</td>
+              <td>${ampsPerPS.toFixed(2)}A &mdash; ${wattsPerPS.toFixed(1)}W</td>
+              <td>${acAmpsPerPS.toFixed(2)}A &mdash; ${acDrawPerPS.toFixed(1)}W @ ${acV}V AC</td>
+              <td><span class="badge ${(wattsPerPS/ps.watts)<=psDerate ? 'badge-ok':'badge-danger'}">${((wattsPerPS/ps.watts)*100).toFixed(0)}%</span></td>
+            </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ── CIRCUIT DISTRIBUTION ── -->
+    <div class="result-section">
+      <div class="result-section-header">&#128267; AC Circuit Distribution (${breakerA}A @ ${acV}V, ${Math.round(acSafety*100)}% rule)</div>
+      <div class="result-section-body">
+        <table>
+          <thead><tr>
+            <th>Circuit</th>
+            <th>Power Supplies</th>
+            <th>AC Current Load</th>
+            <th>AC Watt Load</th>
+            <th>Status</th>
+          </tr></thead>
+          <tbody>${circuitTable}</tbody>
+        </table>
+        <p style="margin-top:12px; font-size:.8rem; color:var(--muted)">
+          NEC 80% rule: a ${breakerA}A circuit may carry <strong style="color:var(--text)">${usableCircuitA.toFixed(1)}A (${usableCircuitW.toFixed(0)}W)</strong> continuously.
+          Each ${ps.name} draws <strong style="color:var(--text)">${acAmpsPerPS.toFixed(2)}A AC</strong> at full load.
+        </p>
+      </div>
+    </div>
+
+    <!-- ── POWER INJECTION ── -->
+    <div class="result-section">
+      <div class="result-section-header">&#128268; Power Injection Plan</div>
+      <div class="result-section-body">
+        ${injAdvice}
+        <div style="margin-top:14px; padding:12px; background:var(--panel2); border-radius:8px; font-size:.8rem; color:var(--muted); line-height:1.7;">
+          <strong style="color:var(--text); display:block; margin-bottom:6px;">How to inject power:</strong>
+          1. Run power supply output to the <em>start</em> of each pixel segment (+12V and GND).<br>
+          2. At each injection point, solder or use a T-tap connector to the +12V and GND rails of the strip.<br>
+          3. Use appropriately gauged wire (${injGauge} AWG recommended for injection taps).<br>
+          4. Keep injection wire runs as short as practical to minimize additional drop.<br>
+          5. Ensure all power supplies share a common ground if the data signal is shared.
+        </div>
+      </div>
+    </div>
+
+    <!-- ── VOLTAGE DROP GRAPH ── -->
+    <div class="chart-wrap">
+      <div style="font-size:.85rem; font-weight:700; margin-bottom:14px; display:flex; justify-content:space-between; align-items:center;">
+        <span>&#128200; Injection Segment Voltage Drop &mdash; Voltage at Farthest Pixel per Segment Length</span>
+        <span style="font-size:.75rem; color:var(--muted)">Starts at ${vAtStrip.toFixed(2)}V (after pigtail+ext drop). Min: ${minV}V (red). Selected inj. gauge: solid line.</span>
+      </div>
+      <canvas id="vdropChart"></canvas>
+    </div>
+
+    <!-- ── WIRE GAUGE REFERENCE ── -->
+    <div class="result-section">
+      <div class="result-section-header">&#128296; DC Wire Gauge Reference &mdash; PS Output to Pixels (NEC, PVC 60°C, Open-Air)</div>
+      <div class="result-section-body">
+        <table>
+          <thead><tr>
+            <th>AWG</th>
+            <th>Ampacity (NEC)</th>
+            <th>Resistance (mΩ/ft)</th>
+            <th>Max Injection Segment (N&#178; model, ${vBudgetStrip.toFixed(2)}V strip budget)</th>
+            <th>Common Use</th>
+          </tr></thead>
+          <tbody>
+            ${[10,12,14,16,18].map(g => {
+              // Max pixels per injection segment: min of voltage-drop model AND ampacity limit
+              const vdropLim = vBudgetStrip > 0 && ampsPerPixel > 0 && spacingFt > 0
+                ? Math.floor(Math.sqrt(vBudgetStrip / (ampsPerPixel * WIRE_RES[g] * spacingFt)))
+                : 0;
+              const ampLim = ampsPerPixel > 0 ? Math.floor(WIRE_AMP[g] / ampsPerPixel) : 999999;
+              const maxPx  = vdropLim > 0 ? Math.min(vdropLim, ampLim) : 0;
+              const maxFtSeg = maxPx * spacingFt;
+              const inSpec = ampsPerPS <= WIRE_AMP[g];
+              const isExt = g === extGauge;
+              const isPig = pigtailOn && g === pigtailGauge;
+              const isInj = g === injGauge;
+              const markers = [isExt?'&#8592; ext':'', isPig?'&#8592; pigtail':'', isInj?'&#8592; inj':''].filter(Boolean).join(' ');
+              return `<tr>
+                <td><strong>${g} AWG</strong> <span style="color:var(--accent);font-size:.75rem">${markers}</span></td>
+                <td>${WIRE_AMP[g]}A <span class="badge ${inSpec ? 'badge-ok':'badge-danger'}">${inSpec?'OK for ext':'OVER for ext'}</span></td>
+                <td>${(WIRE_RES[g]*1000).toFixed(3)}</td>
+                <td>${maxPx > 0 ? `${maxPx} px (~${maxFtSeg.toFixed(0)} ft)` : '—'}</td>
+                <td style="color:var(--muted)">${{10:'Heavy mains',12:'Extension / main feed',14:'Medium runs',16:'Short injection taps',18:'Pigtails'}[g]}</td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ── AC WIRING NOTE ── -->
+    <div style="margin-bottom:12px; padding:12px 16px; background:rgba(124,58,237,.07); border:1px solid rgba(124,58,237,.25); border-radius:8px; font-size:.78rem; color:var(--muted); line-height:1.75;">
+      <strong style="color:#a78bfa; display:block; margin-bottom:4px;">&#9432; About AC Wiring (Wall Outlet &rarr; Power Supply)</strong>
+      The AC input side of your power supplies is <strong style="color:var(--text)">not sized by this calculator</strong>.
+      Each MeanWell LRS/SE supply ships with or accepts a standard IEC C14 power inlet.
+      You plug in a standard NEMA 5-15P (US) power cord &mdash; these cords are pre-rated to 10–15A and are appropriate for the supply's input draw.
+      The calculator tells you <strong style="color:var(--text)">how many supplies to put on each 15A or 20A circuit</strong> &mdash;
+      that is the AC planning output. If you are permanently hard-wiring supplies to a junction box, use
+      <strong style="color:var(--text)">12 AWG or 14 AWG NEC Romex</strong> (12 AWG for 20A circuits, 14 AWG for 15A circuits)
+      and have a licensed electrician complete that work.
+    </div>
+
+    <!-- ── DISCLAIMER ── -->
+    <div style="margin-top:10px; padding:12px 16px; background:rgba(245,158,11,.08); border:1px solid rgba(245,158,11,.25); border-radius:8px; font-size:.78rem; color:var(--muted); line-height:1.7;">
+      <strong style="color:var(--warn)">Important:</strong>
+      This tool provides estimates for planning purposes. Always consult a licensed electrician for permanent installations.
+      NEC ampacity values assume open-air, single-conductor PVC (60°C) — derate for bundled cables (NEC 310.15).
+      Power injection distances use the N&sup2; tapered current model (end-fed segment, uniform pixel load).
+      Pixel current is modeled at ${(wattsPerPixel/VOLTS*1000).toFixed(1)} mA/pixel (${wattsPerPixel}W @ ${VOLTS}V) at 100% white; actual draw varies by color and content.
+    </div>
+  `;
+
+  // ── Chart.js ─────────────────────────────────────────────────────────────
+  const chartCanvas = document.getElementById('vdropChart');
+  if (typeof Chart !== 'undefined' && chartCanvas) {
+    if (voltagDropChart) voltagDropChart.destroy();
+    const ctx = chartCanvas.getContext('2d');
+    voltagDropChart = new Chart(ctx, {
+      type: 'line',
+      data: { labels, datasets },
+      options: {
+        responsive: true,
+        interaction: { mode: 'index', intersect: false },
+        plugins: {
+          legend: { labels: { color: '#94a3b8', font: { size: 12 } } },
+          tooltip: {
+            backgroundColor: '#1a1a24',
+            borderColor: '#2e2e42',
+            borderWidth: 1,
+            titleColor: '#e2e8f0',
+            bodyColor: '#94a3b8',
+            callbacks: {
+              label: ctx => ` ${ctx.dataset.label}: ${ctx.parsed.y} V`
+            }
+          }
+        },
+        scales: {
+          x: {
+            title: { display: true, text: 'Run Length (feet)', color: '#94a3b8' },
+            ticks: { color: '#94a3b8', maxTicksLimit: 12 },
+            grid: { color: 'rgba(46,46,66,.6)' }
+          },
+          y: {
+            title: { display: true, text: 'Voltage at End of Run (V)', color: '#94a3b8' },
+            ticks: { color: '#94a3b8', callback: v => v + ' V' },
+            grid: { color: 'rgba(46,46,66,.6)' },
+            min: Math.max(0, minV - 0.5),
+            max: Math.min(VOLTS + 0.3, vAtStrip + 0.3)
+          }
+        }
+      }
+    });
+  } else if (chartCanvas) {
+    chartCanvas.style.display = 'none';
+    chartCanvas.insertAdjacentHTML('afterend',
+      '<p style="text-align:center;color:var(--muted);font-size:.8rem;padding:12px 0;">Chart unavailable — Chart.js library could not be loaded.</p>');
+  }
+}
+
+// Initialize voltage-dependent UI, then calculate
+onVoltageChange();   // calls onPixelTypeChange() internally
+calculate();
+
+// ── Tooltip system ────────────────────────────────────────────────────────
+const TIPS = {
+  numPixels: {
+    title: 'Number of Pixels',
+    body: `<div class="tip-section">
+      <div class="tip-section-head">What to enter</div>
+      Count the total number of individual addressable pixel <strong>nodes</strong> in your installation.
+      Each WS2811 pixel = one IC chip controlling 3 LEDs (Red, Green, Blue).
+    </div>
+    <div class="tip-section">
+      <div class="tip-section-head">Where to find this number</div>
+      &bull; <strong>LED strips:</strong> the product listing or label will say e.g. "300 pixels / 5m roll."<br>
+      &bull; <strong>Bullet / module pixels:</strong> count each physical node on your wire harness.<br>
+      &bull; Do <em>not</em> count individual LED diodes — count pixel nodes. A 300-pixel strip has 300 pixels, not 900 LEDs.
+    </div>`
+  },
+  density: {
+    title: 'Pixel Density / Spacing',
+    body: `<div class="tip-section">
+      <div class="tip-section-head">What this does</div>
+      Sets the physical spacing between pixels to calculate your total run length.
+      Longer run = more voltage drop.
+    </div>
+    <div class="tip-section">
+      <div class="tip-section-head">How to find your density</div>
+      &bull; Check the product spec for "pixels per meter" (px/m).<br>
+      &bull; Common WS2811 strips: <strong>30 px/m</strong> (sparse, outdoor pixels) or <strong>60 px/m</strong> (dense strip).<br>
+      &bull; For bullet/module pixels on a wire harness, measure center-to-center between two adjacent nodes and use "Custom."
+    </div>`
+  },
+  customSpacing: {
+    title: 'Custom Pixel Spacing',
+    body: `<div class="tip-section">
+      <div class="tip-section-head">How to measure</div>
+      Measure the distance from the <strong>center of one pixel</strong> to the <strong>center of the next pixel</strong>
+      along the wire or strip. Enter that value in inches.<br><br>
+      Example: bullet pixels on a 2-inch harness = enter <strong>2.0</strong>.
+    </div>`
+  },
+  brightness: {
+    title: 'Brightness Level',
+    body: `<div class="tip-section">
+      <div class="tip-section-head">What this does</div>
+      Scales all power and current calculations. 100% = every pixel at maximum white (all 3 color channels fully on) — the absolute worst case draw.
+    </div>
+    <div class="tip-section">
+      <div class="tip-section-head">What to set it to</div>
+      Set it to the <strong>maximum brightness your show will actually run at.</strong><br>
+      &bull; Real-world colorful animation: typically <strong>30–60%</strong> average.<br>
+      &bull; Full white scenes / chases: closer to <strong>80–100%</strong>.<br>
+      &bull; Power and current scale linearly: 50% brightness ≈ 50% power.<br>
+      <strong style="color:#f59e0b;">Size your wiring for the brightness you plan to run.</strong>
+    </div>`
+  },
+  wireSection: {
+    title: 'DC Wiring — Overview',
+    body: `<div class="tip-section">
+      <div class="tip-section-head">The DC wiring chain (PS to pixels)</div>
+      Power flows: <strong>PS output terminals → Pigtail (optional) → Extension wire → Pixel 1 → strip → injection points</strong><br><br>
+      &bull; <strong>Pigtail</strong>: short wire inside or exiting the controller enclosure.<br>
+      &bull; <strong>Extension wire</strong>: longer run from the enclosure to where your first pixel is located.<br>
+      &bull; <strong>Injection wires</strong>: additional feeds tapped mid-strip to re-boost voltage.<br><br>
+      Both the pigtail and extension carry the <em>full PS output current</em>.
+      Their voltage drops are subtracted from 12V before the strip even starts.
+    </div>
+    <div class="tip-section">
+      <div class="tip-section-head">These gauges are DC only — NOT the AC cord</div>
+      The AC side (wall → power supply) uses the supply's included IEC C14 power cord — no sizing needed for plug-in installs.
+    </div>`
+  },
+  pigtailEnabled: {
+    title: 'Controller Pigtail — What It Is',
+    body: `<div class="tip-section">
+      <div class="tip-section-head">What the pigtail is</div>
+      A <strong>pigtail</strong> is a short wire that exits the power supply or controller enclosure.
+      It typically runs from the PS output screw terminals, through a strain relief or grommet in the case wall,
+      to a connector (Anderson Powerpole, barrel jack, bare wire ends, etc.) on the outside of the enclosure.
+    </div>
+    <div class="tip-section">
+      <div class="tip-section-head">When to include it</div>
+      Check this box if you have a defined short wire segment inside or exiting your controller box
+      that is a different gauge or length from your main extension run.
+      If your power supply connects directly to the extension wire with no intermediate segment, leave this unchecked.
+    </div>`
+  },
+  pigtailGauge: {
+    title: 'Pigtail Wire Gauge',
+    body: `<div class="tip-section">
+      <div class="tip-section-head">What to enter</div>
+      Select the AWG gauge of the wire used for the pigtail segment.
+      Pigtails are typically short (1–3 ft) and can be lighter gauge since the run is short —
+      but the wire <strong>must still be rated for the full PS output current</strong>.<br><br>
+      18 AWG is common for short pigtails under ~5A. For 10–20A PS output, use 14–12 AWG even for short runs.
+      Check the results card — it will flag if the pigtail gauge is too small for the current.
+    </div>`
+  },
+  pigtailLen: {
+    title: 'Pigtail Length',
+    body: `<div class="tip-section">
+      <div class="tip-section-head">What to enter</div>
+      Measure from the <strong>PS output terminals</strong> to the exit connector or end of the pigtail wire.
+      This is typically 1–3 feet for an in-enclosure pigtail. Enter 0.5 ft if very short.<br><br>
+      Even short lengths have a measurable voltage drop at high currents, which is why this is included
+      in the voltage budget calculation.
+    </div>`
+  },
+  extensionGauge: {
+    title: 'Extension Wire Gauge',
+    body: `<div class="tip-section">
+      <div class="tip-section-head">What the extension wire is</div>
+      The extension wire is the run from your <strong>controller enclosure exit point</strong> (or PS pigtail end)
+      to the <strong>first pixel in your light string</strong>. This might run along a roofline, across a yard,
+      up a ladder, or through conduit to reach the installation site.
+    </div>
+    <div class="tip-section">
+      <div class="tip-section-head">How to choose the gauge</div>
+      This wire carries the <strong>full PS output current</strong>, so choose based on that amp load:<br>
+      &bull; <strong>12 AWG</strong> — recommended for most installations (up to 20A, good voltage drop).<br>
+      &bull; <strong>10 AWG</strong> — for high-current supplies or runs over 25–30 ft at full load.<br>
+      &bull; <strong>14 AWG</strong> — only for lower current loads or short extension runs.<br><br>
+      Longer extensions = more voltage drop = less budget left for the strip.
+    </div>`
+  },
+  extensionLen: {
+    title: 'Extension Wire Length',
+    body: `<div class="tip-section">
+      <div class="tip-section-head">What to enter</div>
+      Measure the total length of wire from your enclosure exit point to where your pixel run begins.
+      If you don't know yet, estimate conservatively (longer = safer sizing).<br><br>
+      <strong>Important:</strong> This length directly affects how much voltage is available at the first pixel.
+      A 50 ft extension at 15A on 14 AWG drops ~1.1V — significant for a 1V total budget.
+      Use the results card to see the exact drop for your inputs.
+    </div>`
+  },
+  injGauge: {
+    title: 'DC Injection Wire — Mid-Run Power Taps',
+    body: `<div class="tip-section">
+      <div class="tip-section-head">What injection wire is</div>
+      When a pixel strip is too long for the voltage to stay above minimum from the start alone,
+      you add extra DC wires at intervals along the strip — called <strong>power injection.</strong>
+      These short wires connect from a power supply output (or bus bar) directly to the +12V and GND
+      pads at a mid-point on the strip.
+    </div>
+    <div class="tip-section">
+      <div class="tip-section-head">How to choose</div>
+      &bull; <strong>18 AWG</strong> — standard for most injection pigtails (runs under ~3 ft).<br>
+      &bull; <strong>16–14 AWG</strong> — if the injection wire itself runs more than a few feet.<br>
+      &bull; Must handle the current for that segment — check the results output.
+    </div>`
+  },
+  psModel: {
+    title: 'Power Supply Model',
+    body: `<div class="tip-section">
+      <div class="tip-section-head">About MeanWell supplies</div>
+      MeanWell LRS/SE-series are enclosed switching power supplies — the industry standard for
+      pixel lighting. They provide stable 12V DC output with built-in over-current, over-voltage,
+      and short-circuit protection.
+    </div>
+    <div class="tip-section">
+      <div class="tip-section-head">12V models</div>
+      &bull; <strong>LRS-350-12</strong> — the most widely used. ~$30–40, 29.2A, handles medium-to-large installs, UL listed.<br>
+      &bull; <strong>LRS-200-12</strong> — smaller zones or limited space (17A).<br>
+      &bull; <strong>LRS-100-12</strong> — small zones or low-power sections (10A).<br>
+      &bull; <strong>SE-600-12</strong> — large installs; verify wiring handles 50A output.
+    </div>
+    <div class="tip-section">
+      <div class="tip-section-head">5V models</div>
+      &bull; <strong>LRS-100-5</strong> — 100W / 20A, good for small 5V sections.<br>
+      &bull; <strong>LRS-200-5</strong> — 180W / 36A, medium 5V installs.<br>
+      &bull; <strong>SE-200-5</strong> — 200W / 40A, similar to LRS-200-5 with different form factor.<br>
+      &bull; <strong>RSP-320-5</strong> — 320W / 64A, large 5V installs. Note: 5V at 64A requires very heavy DC wiring (10 AWG or larger).
+    </div>`
+  },
+  psDerate: {
+    title: 'Power Supply Derate Factor',
+    body: `<div class="tip-section">
+      <div class="tip-section-head">What it means</div>
+      Running a supply at 100% rated output continuously causes excess heat and accelerated wear.
+      MeanWell's own documentation recommends staying at or below <strong>80% of rated output</strong>
+      for continuous loads.
+    </div>
+    <div class="tip-section">
+      <div class="tip-section-head">Effect on sizing</div>
+      At 80%: an LRS-350-12 is treated as a <strong>280W / 23.4A</strong> supply for sizing purposes —
+      meaning you may need one more supply than if you used 100%. This is intentional and correct.<br><br>
+      &bull; <strong>80%</strong> — use this for permanent installs and any continuous-run scenario.<br>
+      &bull; <strong>90%</strong> — acceptable if the supply is in a cool, well-ventilated enclosure.<br>
+      &bull; <strong>100%</strong> — not recommended for anything running more than a few minutes.
+    </div>`
+  },
+  acSafety: {
+    title: 'AC Safety Factor (NEC 80% Rule)',
+    body: `<div class="tip-section">
+      <div class="tip-section-head">The rule</div>
+      NEC 210.20 requires that any load running continuously for <strong>3 hours or more</strong>
+      must not exceed <strong>80% of the circuit breaker rating.</strong><br><br>
+      A 15A breaker → max <strong>12A</strong> continuous.<br>
+      A 20A breaker → max <strong>16A</strong> continuous.
+    </div>
+    <div class="tip-section">
+      <div class="tip-section-head">Why it matters</div>
+      Exceeding 80% causes the circuit wiring and outlet to run hot, increases fire risk,
+      and can cause nuisance tripping. This is legally required for permanent wiring and strongly
+      recommended for temporary event setups. This factor applies only to the <em>AC outlet circuit</em>,
+      not the DC wiring (which has its own sizing via wire gauge and ampacity).
+    </div>`
+  },
+  acVoltage: {
+    title: 'AC Mains Voltage',
+    body: `<div class="tip-section">
+      <div class="tip-section-head">How to determine yours</div>
+      &bull; <strong>120V</strong> — US and Canada. Standard household outlets with two flat blades + round ground pin.<br>
+      &bull; <strong>240V</strong> — Europe, UK, Australia, and most of Asia.
+    </div>
+    <div class="tip-section">
+      <div class="tip-section-head">Why it matters for this calculator</div>
+      Higher mains voltage means each power supply draws fewer amps from the wall for the same wattage.
+      At 240V, more supplies fit on one circuit, so you may need fewer circuits total.
+      MeanWell LRS-series supplies are auto-ranging (100–240V input) and work on either voltage.
+    </div>`
+  },
+  breakerAmps: {
+    title: 'Circuit Breaker Rating',
+    body: `<div class="tip-section">
+      <div class="tip-section-head">How to find yours</div>
+      Look at the breaker switch in your electrical panel — the amperage is printed on the handle
+      (e.g. "15" or "20"). Alternatively, check the outlet: a <strong>20A outlet</strong> has one
+      slot that is T-shaped (horizontal + vertical). A standard 15A outlet has two vertical slots only.
+    </div>
+    <div class="tip-section">
+      <div class="tip-section-head">Typical circuits</div>
+      &bull; <strong>15A</strong> — living rooms, bedrooms, hallways (14 AWG Romex).<br>
+      &bull; <strong>20A</strong> — kitchens, garages, workshops, utility rooms (12 AWG Romex).<br><br>
+      <strong style="color:#f59e0b;">Do not share a circuit with other large loads (appliances, A/C, TVs)
+      without accounting for their wattage first.</strong>
+    </div>`
+  },
+  maxRunFeet: {
+    title: 'Max Run Length to Display on Graph',
+    body: `<div class="tip-section">
+      <div class="tip-section-head">What to enter</div>
+      Set this to the longest DC wire run in your install — typically your total strip length.
+      The voltage drop graph will plot from 0 to this distance for each wire gauge so you can
+      visually see where voltage dips below your minimum threshold.
+    </div>
+    <div class="tip-section">
+      <div class="tip-section-head">Tip</div>
+      Start with your calculated total run length (shown in the results). If injection is required,
+      set this to the longest single injection segment to see the per-segment drop clearly.
+    </div>`
+  },
+  minVoltage: {
+    title: 'Minimum Acceptable Pixel Voltage',
+    body: `<div class="tip-section">
+      <div class="tip-section-head">What it controls</div>
+      The red dashed line on the voltage drop graph marks this threshold. Wire gauge runs that
+      cross below this line at your target distance need a larger gauge or power injection.
+      This value is automatically set when you switch between 5V and 12V.
+    </div>
+    <div class="tip-section">
+      <div class="tip-section-head">Recommended values</div>
+      <strong>12V pixels (WS2811):</strong><br>
+      &bull; <strong>11.0V</strong> — recommended minimum for consistent brightness and color.<br>
+      &bull; <strong>10.8V</strong> — WS2811 datasheet absolute minimum.<br><br>
+      <strong>5V pixels (WS2812B):</strong><br>
+      &bull; <strong>4.5V</strong> — recommended minimum.<br>
+      &bull; <strong>4.0V</strong> — WS2812B datasheet absolute minimum (unstable at this level).<br><br>
+      Below the minimum you may see flickering, color shifts, or pixel dropouts at the far end of a run.
+    </div>`
+  },
+  pixelConstruction: {
+    title: 'Pixel Construction — Resistor vs Regulated',
+    body: `<div class="tip-section">
+      <div class="tip-section-head">Resistor-Limited (Standard)</div>
+      LED current is set by a fixed resistor in series with each LED channel.
+      As supply voltage drops, current drops proportionally — causing <strong>dimming and colour shift</strong>.
+      <br><br>
+      &bull; Most WS2811 nodes and WS2812B strips from generic suppliers.<br>
+      &bull; Minimum voltage ~<strong>11V</strong> (12V systems) or <strong>4.5V</strong> (5V systems) before visible degradation.<br>
+      &bull; <strong>Tight voltage budget</strong> — injection points needed more frequently.
+    </div>
+    <div class="tip-section">
+      <div class="tip-section-head">Constant Current Regulated</div>
+      Each pixel node has a dedicated constant-current driver IC (e.g. <strong>BCR421U</strong>, AL5809, SY3401).
+      The driver holds LED current — and therefore brightness and colour — <strong>constant</strong>
+      across a wide supply voltage range, typically <strong>9V–15V</strong> for 12V nodes.
+      <br><br>
+      &bull; Holiday Coro, Boscoyo Studio, and many premium pixel suppliers offer regulated nodes.<br>
+      &bull; Minimum voltage ~<strong>9V</strong> (12V systems) — three times more voltage budget than resistor pixels.<br>
+      &bull; <strong>Much wider injection spacing</strong> — far fewer injection points needed for the same run.<br>
+      &bull; Look for "BCR421U," "constant current," or "regulated" in the pixel product description.
+    </div>
+    <div class="tip-section">
+      <div class="tip-section-head">Impact on this calculator</div>
+      Regulated pixels allow the minimum voltage threshold to be set lower, which increases the available
+      voltage budget for the strip. This directly extends how many pixels can fit between injection points
+      (the quadratic injection model scales as √budget, so 3× more budget ≈ 1.7× more pixels per segment).
+    </div>`
+  },
+  pixelVoltage: {
+    title: 'Pixel Supply Voltage — 5V vs 12V',
+    body: `<div class="tip-section">
+      <div class="tip-section-head">12V pixels (WS2811)</div>
+      WS2811 is a <strong>standalone IC</strong> that controls 3 external RGB LEDs.
+      Most commonly wired for 12V, running 3 LEDs in series per channel.
+      Better voltage drop tolerance than 5V — suitable for longer runs before injection is needed.
+      Common formats: node strings (bullet pixels), outdoor C9/C7 style, rigid modules.
+    </div>
+    <div class="tip-section">
+      <div class="tip-section-head">5V pixels (WS2812B)</div>
+      WS2812B has the RGB LEDs and controller <strong>integrated into one package</strong>.
+      Operates at 5V. More current per watt than 12V — requires heavier wire or more frequent injection.
+      Common formats: flexible strips (tape), ring/matrix panels, fairy string lights.
+    </div>
+    <div class="tip-section">
+      <div class="tip-section-head">Effect on power supplies</div>
+      Switching voltage updates the power supply list, watts/pixel default, and minimum voltage threshold automatically.
+      5V systems draw significantly more amps for the same wattage (P=IV), so wire sizing is more critical.
+    </div>`
+  },
+  wattsPerPixel: {
+    title: 'Watts per Pixel at 100% White',
+    body: `<div class="tip-section">
+      <div class="tip-section-head">What to enter</div>
+      Enter the maximum power one pixel draws when all three color channels (R, G, B) are at full brightness —
+      this is called <strong>"full white."</strong> All power and current calculations scale from this value,
+      multiplied by your brightness setting.
+    </div>
+    <div class="tip-section">
+      <div class="tip-section-head">Common values</div>
+      &bull; <strong>12V WS2811: 0.60 W/pixel</strong> — most common real-world value (50mA &times; 12V).
+        Some datasheets show up to 0.72W (60mA); 0.60W is a reliable planning figure.<br>
+      &bull; <strong>5V WS2812B: 0.30 W/pixel</strong> — most common value (60mA &times; 5V).<br>
+      &bull; Higher-brightness or higher-density pixels may draw more — check your product spec sheet.
+    </div>
+    <div class="tip-section">
+      <div class="tip-section-head">Where to find your pixel's spec</div>
+      Look for <em>mA per channel</em> or <em>mA per pixel</em> on the product datasheet or listing.
+      Multiply mA &times; supply voltage to get watts. If three channels are listed separately,
+      add them together (e.g. 3 &times; 20mA = 60mA total).
+    </div>`
+  }
+};
+
+// Build tooltip DOM element
+const tipEl = document.createElement('div');
+tipEl.className = 'tip-panel';
+tipEl.innerHTML = '';
+document.body.appendChild(tipEl);
+
+let activeTipBtn = null;
+
+function toggleTip(btn, key) {
+  // Close if clicking the same button again
+  if (activeTipBtn === btn && tipEl.classList.contains('visible')) {
+    closeTip();
+    return;
+  }
+  const tip = TIPS[key];
+  if (!tip) return;
+  activeTipBtn = btn;
+  tipEl.innerHTML = `<div class="tip-title">
+    <span>${tip.title}</span>
+    <button class="tip-close" onclick="closeTip()">&#x2715;</button>
+  </div>${tip.body}`;
+  tipEl.classList.add('visible');
+  positionTip(btn);
+}
+
+function closeTip() {
+  tipEl.classList.remove('visible');
+  activeTipBtn = null;
+}
+
+function positionTip(btn) {
+  const rect = btn.getBoundingClientRect();
+  const tw = 316, margin = 10;
+  let left, top;
+  // Try to show to the right of the sidebar
+  if (rect.right + tw + margin < window.innerWidth) {
+    left = rect.right + margin;
+    top  = rect.top - 10;
+  } else {
+    // Fall back: show above/below centered on button
+    left = rect.left - tw - margin;
+    top  = rect.top - 10;
+  }
+  // Clamp to viewport
+  left = Math.max(margin, Math.min(left, window.innerWidth  - tw - margin));
+  top  = Math.max(margin, Math.min(top,  window.innerHeight - 40 - margin));
+  tipEl.style.left = left + 'px';
+  tipEl.style.top  = top  + 'px';
+}
+
+// ── Mode switcher ─────────────────────────────────────────────────────────
+function setMode(n) {
+  document.getElementById('mode1Main').style.display = n === 1 ? 'grid' : 'none';
+  document.getElementById('mode2Main').style.display = n === 2 ? 'grid' : 'none';
+  document.getElementById('modeTab1').classList.toggle('active', n === 1);
+  document.getElementById('modeTab2').classList.toggle('active', n === 2);
+}
+
+// ── Controller Database ────────────────────────────────────────────────────
+const CONTROLLERS = {
+  kulp: {
+    brand: 'Kulp',
+    models: {
+      k32max: { name:'K32 Max',  ports:32, banks:8, portsPerBank:4, ampsPerPort:6, maxAmpsPerBank:24,
+        notes:'8 banks &times; 4 ports each (32 total). 6A per port &mdash; 24A max per bank terminal. Each bank has its own power terminal &mdash; 8 power inputs total. One PSU can be shared across multiple banks when combined load fits.' },
+      k16d:  { name:'K16D',     ports:16, banks:2, portsPerBank:8, maxAmpsPerBank:30,
+        notes:'2 banks &times; 8 ports. Differential (RS485-style) data outputs &mdash; requires a matching receiver board at each pixel string end for long cable runs.' },
+      k8d:   { name:'K8D',      ports:8,  banks:1, portsPerBank:8, maxAmpsPerBank:30,
+        notes:'1 bank &times; 8 ports. Differential data outputs &mdash; receiver boards required at pixel string ends.' },
+      k4:    { name:'K4',       ports:4,  banks:1, portsPerBank:4, ampsPerPort:6, maxAmpsPerBank:24,
+        notes:'1 bank &times; 4 ports. 6A per port &mdash; 24A max per bank terminal. Compact form factor.' },
+    }
+  },
+  falcon: {
+    brand: 'Falcon',
+    models: {
+      f16v3: { name:'F16v3', ports:16, banks:4, portsPerBank:4, maxAmpsPerBank:20,
+        notes:'4 banks &times; 4 ports. Fully isolated power per bank &mdash; each bank can run a different voltage (5V, 12V, 24V). Runs FPP firmware; primary interface is wired Ethernet.' },
+      f16v4: { name:'F16v4', ports:16, banks:4, portsPerBank:4, maxAmpsPerBank:20,
+        notes:'4 banks &times; 4 ports. Updated power connectors and improved board layout over v3.' },
+      f48:   { name:'F48',   ports:48, banks:6, portsPerBank:8, maxAmpsPerBank:30,
+        notes:'6 banks &times; 8 ports. Designed for large permanent installations. Plan all power wiring carefully at this scale.' },
+      f4v3:  { name:'F4v3',  ports:4,  banks:1, portsPerBank:4, maxAmpsPerBank:20,
+        notes:'1 bank &times; 4 ports. Compact standalone or satellite/slave controller.' },
+    }
+  },
+  genius: {
+    brand: 'Genius',
+    models: {
+      gpc16: { name:'Genius Pixel Controller (GPC-16)', ports:16, banks:2, portsPerBank:8, maxAmpsPerBank:30,
+        notes:'2 banks &times; 8 ports. ESP32-based with WiFi or Ethernet depending on variant.' },
+    }
+  },
+  aldrick: {
+    brand: 'Aldrick / Baldrick',
+    models: {
+      b16: { name:'Baldrick (16-port)', ports:16, banks:4, portsPerBank:4, maxAmpsPerBank:20,
+        notes:'4 banks &times; 4 ports. Open-source community DIY controller (DiY Christmas / AU community forums). Gerber files available.' },
+      b32: { name:'Baldrick (32-port)', ports:32, banks:4, portsPerBank:8, maxAmpsPerBank:30,
+        notes:'4 banks &times; 8 ports. Open-source DIY controller, larger variant.' },
+    }
+  }
+};
+
+// ── Controller UI helpers ──────────────────────────────────────────────────
+function getCtrlVolts() {
+  return parseInt(document.querySelector('input[name="ctrlVoltage"]:checked').value);
+}
+function getCtrlPixType() {
+  return document.querySelector('input[name="ctrlPixType"]:checked').value;
+}
+function getCtrlSpec() {
+  const brand = document.getElementById('ctrlBrand').value;
+  const key   = document.getElementById('ctrlModel').value;
+  return CONTROLLERS[brand]?.models[key];
+}
+
+function onCtrlBrandChange() {
+  const brand = document.getElementById('ctrlBrand').value;
+  const sel   = document.getElementById('ctrlModel');
+  sel.innerHTML = '';
+  Object.entries(CONTROLLERS[brand].models).forEach(([key, m]) => {
+    const opt = document.createElement('option');
+    opt.value = key; opt.textContent = m.name;
+    sel.appendChild(opt);
+  });
+  onCtrlModelChange();
+}
+
+function onCtrlModelChange() {
+  const spec = getCtrlSpec();
+  if (!spec) return;
+  document.getElementById('ctrlSpecSummary').innerHTML =
+    `<div style="padding:8px 12px; background:rgba(79,142,247,.08); border:1px solid rgba(79,142,247,.22);
+      border-radius:7px; font-size:.78rem; color:var(--muted); line-height:1.8; margin-bottom:4px;">
+      <strong style="color:var(--text)">${spec.ports} ports</strong> &bull;
+      <strong style="color:var(--text)">${spec.banks} bank${spec.banks!==1?'s':''}</strong> &bull;
+      <strong style="color:var(--text)">${spec.portsPerBank} ports/bank</strong> &bull;
+      ${spec.ampsPerPort ? `<strong style="color:var(--text)">${spec.ampsPerPort}A/port</strong> &bull; ` : ''}max <strong style="color:var(--text)">${spec.maxAmpsPerBank}A/bank</strong><br>
+      <span style="font-size:.72rem;">${spec.notes}</span>
+    </div>`;
+  buildCtrlBankInputs();
+  onCtrlVoltageChange();
+}
+
+function onCtrlVoltageChange() {
+  const volts = getCtrlVolts();
+  const def   = VOLT_DEFAULTS[volts];
+  document.getElementById('ctrlVolt12Label').style.borderColor = volts===12?'var(--accent)':'var(--border)';
+  document.getElementById('ctrlVolt12Label').style.color       = volts===12?'var(--text)':'var(--muted)';
+  document.getElementById('ctrlVolt5Label').style.borderColor  = volts===5?'var(--accent)':'var(--border)';
+  document.getElementById('ctrlVolt5Label').style.color        = volts===5?'var(--text)':'var(--muted)';
+  document.getElementById('ctrlWattsPerPixel').value = def.wattsPerPixel;
+  // Rebuild PS dropdown
+  const sel = document.getElementById('ctrlPsModel');
+  sel.innerHTML = '';
+  Object.entries(PS_MODELS).filter(([, ps]) => ps.volts === volts).forEach(([key, ps]) => {
+    const opt = document.createElement('option');
+    opt.value = key; opt.textContent = `${ps.name} — ${ps.watts}W / ${ps.volts}V / ${ps.amps}A`;
+    if (key === def.defaultPS) opt.selected = true;
+    sel.appendChild(opt);
+  });
+  onCtrlPixTypeChange();
+}
+
+function onCtrlPixTypeChange() {
+  const type = getCtrlPixType();
+  document.getElementById('ctrlPixResistorLabel').style.borderColor = type==='resistor'?'var(--accent)':'var(--border)';
+  document.getElementById('ctrlPixResistorLabel').style.color       = type==='resistor'?'var(--text)':'var(--muted)';
+  document.getElementById('ctrlPixRegulatedLabel').style.borderColor= type==='regulated'?'var(--accent)':'var(--border)';
+  document.getElementById('ctrlPixRegulatedLabel').style.color      = type==='regulated'?'var(--text)':'var(--muted)';
+  updateCtrlMinV();
+}
+
+function getCtrlPixMode() {
+  return document.querySelector('input[name="ctrlPixMode"]:checked').value;
+}
+
+function buildCtrlBankInputs() {
+  const spec      = getCtrlSpec();
+  const mode      = getCtrlPixMode();
+  const container = document.getElementById('ctrlBankInputContainer');
+  const defaultPx = parseInt(document.getElementById('ctrlPixPerPort').value) || 100;
+
+  // Update mode label styles
+  const modes = {uniform:'Uniform', bank:'PerBank', port:'PerPort'};
+  Object.entries(modes).forEach(([val, id]) => {
+    const el = document.getElementById(`ctrlMode${id}Label`);
+    const active = mode === val;
+    el.style.borderColor = active ? 'var(--accent)' : 'var(--border)';
+    el.style.color       = active ? 'var(--text)'   : 'var(--muted)';
+  });
+
+  // Update default field label
+  document.getElementById('ctrlUniformFieldLabel').textContent =
+    mode === 'uniform' ? 'Pixels per Port (all ports)' : 'Default pixels per port (used as starting value)';
+
+  if (!spec || mode === 'uniform') { container.innerHTML = ''; return; }
+
+  if (mode === 'bank') {
+    // ── Per-bank inputs ────────────────────────────────────────────────────
+    let html = `<div style="padding:10px 12px; background:rgba(79,142,247,.06);
+      border:1px solid rgba(79,142,247,.2); border-radius:7px; margin-bottom:12px;">
+      <div style="font-size:.72rem; color:var(--muted); margin-bottom:10px; font-weight:700;
+        letter-spacing:.5px; text-transform:uppercase;">Pixels per port, by bank</div>`;
+    for (let b = 0; b < spec.banks; b++) {
+      const p1 = b * spec.portsPerBank + 1, p2 = p1 + spec.portsPerBank - 1;
+      html += `<div style="display:flex; align-items:center; gap:8px; margin-bottom:7px;">
+        <span style="font-size:.78rem; color:var(--muted); min-width:100px; flex-shrink:0;">
+          Bank ${b+1} <span style="font-size:.7rem; color:var(--border);">(ports&nbsp;${p1}&ndash;${p2})</span>
+        </span>
+        <input type="number" id="ctrlBankPx_${b}" value="${defaultPx}" min="0" max="5000"
+          style="flex:1; padding:7px 9px; background:var(--panel2); border:1px solid var(--border);
+          border-radius:6px; color:var(--text); font-size:.88rem; outline:none; width:0;">
+      </div>`;
+    }
+    html += `</div>`;
+    container.innerHTML = html;
+    return;
+  }
+
+  if (mode === 'port') {
+    // ── Per-port grid with bank label ──────────────────────────────────────
+    const bankAccents = [
+      'rgba(79,142,247,.8)', 'rgba(124,58,237,.8)', 'rgba(34,197,94,.8)',
+      'rgba(245,158,11,.8)', 'rgba(239,68,68,.8)',  'rgba(20,184,166,.8)',
+      'rgba(249,115,22,.8)', 'rgba(168,85,247,.8)',
+    ];
+    const bankBg = [
+      'rgba(79,142,247,.08)', 'rgba(124,58,237,.08)', 'rgba(34,197,94,.08)',
+      'rgba(245,158,11,.08)', 'rgba(239,68,68,.08)',  'rgba(20,184,166,.08)',
+      'rgba(249,115,22,.08)', 'rgba(168,85,247,.08)',
+    ];
+    let html = `<div style="padding:10px 12px; background:rgba(79,142,247,.06);
+      border:1px solid rgba(79,142,247,.2); border-radius:7px; margin-bottom:12px;
+      max-height:420px; overflow-y:auto;">
+      <div style="display:grid; grid-template-columns:34px 52px 1fr; gap:3px 6px; align-items:center;">
+        <div style="font-size:.68rem; font-weight:700; color:var(--muted); letter-spacing:.5px; padding-bottom:4px;">PORT</div>
+        <div style="font-size:.68rem; font-weight:700; color:var(--muted); letter-spacing:.5px; padding-bottom:4px;">BANK</div>
+        <div style="font-size:.68rem; font-weight:700; color:var(--muted); letter-spacing:.5px; padding-bottom:4px;">PIXELS</div>`;
+
+    for (let b = 0; b < spec.banks; b++) {
+      if (b > 0) {
+        // Thin divider between banks
+        html += `<div style="grid-column:1/-1; margin:3px 0; border-top:1px solid var(--border);"></div>`;
+      }
+      for (let p = 0; p < spec.portsPerBank; p++) {
+        const portIdx = b * spec.portsPerBank + p;
+        const portNum = portIdx + 1;
+        const bg   = bankBg[b % bankBg.length];
+        const acc  = bankAccents[b % bankAccents.length];
+        html += `
+        <div style="font-size:.82rem; font-weight:700; color:var(--text);
+          padding:3px 4px; background:${bg}; border-radius:4px; text-align:center;">${portNum}</div>
+        <div style="text-align:center;">
+          <span style="font-size:.7rem; padding:2px 6px; border-radius:4px;
+            background:${bg}; border-left:3px solid ${acc};
+            color:var(--text); font-weight:600; white-space:nowrap; display:inline-block;">B${b+1}</span>
+        </div>
+        <input type="number" id="ctrlPortPx_${portIdx}" value="${defaultPx}" min="0" max="5000"
+          style="padding:4px 7px; background:var(--panel2); border:1px solid var(--border);
+          border-radius:5px; color:var(--text); font-size:.82rem; outline:none; width:100%;">`;
+      }
+    }
+    html += `</div></div>`;
+    container.innerHTML = html;
+  }
+}
+
+// ── Controller Main Calculation ────────────────────────────────────────────
+function calculateController() {
+  try {
+    _calculateController();
+  } catch(e) {
+    document.getElementById('ctrlResults').innerHTML =
+      `<div style="padding:20px; background:rgba(239,68,68,.12); border:1px solid var(--danger);
+        border-radius:10px; color:var(--danger); font-family:monospace; font-size:.85rem; white-space:pre-wrap;">
+&#9888; JavaScript error in calculateController():\n${e.message}\n\n${e.stack}</div>`;
+  }
+}
+function _calculateController() {
+  const spec = getCtrlSpec();
+  if (!spec) return;
+
+  const ps = PS_MODELS[document.getElementById('ctrlPsModel').value];
+  if (!ps) {
+    document.getElementById('ctrlResults').innerHTML =
+      `<div style="padding:16px;color:var(--warn);">&#9888; No power supply selected — please choose a PS model.</div>`;
+    return;
+  }
+
+  const VOLTS         = getCtrlVolts();
+  const pixelType     = getCtrlPixType();
+  const wattsPerPixel = parseFloat(document.getElementById('ctrlWattsPerPixel').value);
+  const brightness    = parseFloat(document.getElementById('ctrlBrightness').value) / 100;
+  const psDerate      = parseFloat(document.getElementById('ctrlPsDerate').value);
+  const acV           = parseFloat(document.getElementById('ctrlAcVoltage').value);
+  const breakerA      = parseFloat(document.getElementById('ctrlBreakerAmps').value);
+  const acSafety      = parseFloat(document.getElementById('ctrlAcSafety').value);
+  const brand         = document.getElementById('ctrlBrand').value;
+
+  // ── Wiring ────────────────────────────────────────────────────────────────
+  const pigtailOn     = document.getElementById('ctrlPigtailEnabled').checked;
+  const pigtailGauge  = parseInt(document.getElementById('ctrlPigtailGauge').value);
+  const pigtailLen    = pigtailOn ? parseFloat(document.getElementById('ctrlPigtailLen').value) : 0;
+  const pigtailRes    = pigtailOn ? WIRE_RES[pigtailGauge] : 0;
+  const pigtailAmpacity = pigtailOn ? WIRE_AMP[pigtailGauge] : Infinity;
+  const ctoEOn        = document.getElementById('ctrlCtoEEnabled').checked;
+  const ctoEGauge     = parseInt(document.getElementById('ctrlCtoEGauge').value);
+  const ctoELen       = ctoEOn ? parseFloat(document.getElementById('ctrlCtoELen').value) : 0;
+  const ctoERes       = ctoEOn ? WIRE_RES[ctoEGauge] : 0;
+  const ctoEAmpacity  = ctoEOn ? WIRE_AMP[ctoEGauge] : Infinity;
+  const extGauge      = parseInt(document.getElementById('ctrlExtGauge').value);
+  const extLen        = parseFloat(document.getElementById('ctrlExtLen').value) || 0;
+  const extRes        = WIRE_RES[extGauge];
+  const extAmpacity   = WIRE_AMP[extGauge];
+
+  // ── Injection settings ────────────────────────────────────────────────────
+  const minV          = (VOLT_DEFAULTS[VOLTS] && VOLT_DEFAULTS[VOLTS][pixelType])
+                          ? VOLT_DEFAULTS[VOLTS][pixelType].minV : VOLTS * 0.9;
+  const totalBudget   = Math.max(0, VOLTS - minV);
+  const injGauge      = parseInt(document.getElementById('ctrlInjGauge').value);
+  const injResPerFt   = WIRE_RES[injGauge];
+  const injAmpacity   = WIRE_AMP[injGauge];
+  const densityVal    = document.getElementById('ctrlDensity').value;
+  const spacingFt     = densityVal === 'custom'
+    ? (parseFloat(document.getElementById('ctrlCustomSpacing').value) || 4) / 12
+    : parseFloat(densityVal) / 12;
+
+  const ampsPerPixel  = (wattsPerPixel * brightness) / VOLTS;
+  const rwuFactor     = parseFloat(document.getElementById('ctrlRwuFactor').value) / 100;
+  const rwuAmpsPerPx  = ampsPerPixel * rwuFactor;
+  const usableWatts   = ps.watts * psDerate;
+  const usableAmps    = ps.amps  * psDerate;
+  const usableCircuitA = breakerA * acSafety;
+
+  // ── Per-bank load ─────────────────────────────────────────────────────────
+  const mode          = getCtrlPixMode();
+  const defaultPxPort = parseInt(document.getElementById('ctrlPixPerPort').value) || 0;
+  const bankData = [];
+  for (let b = 0; b < spec.banks; b++) {
+    // Build per-port pixel array for this bank
+    const portPxArr = [];
+    for (let p = 0; p < spec.portsPerBank; p++) {
+      const portIdx = b * spec.portsPerBank + p;
+      let px;
+      if (mode === 'port') {
+        const inp = document.getElementById(`ctrlPortPx_${portIdx}`);
+        px = inp ? (parseInt(inp.value) || 0) : defaultPxPort;
+      } else if (mode === 'bank') {
+        const inp = document.getElementById(`ctrlBankPx_${b}`);
+        px = inp ? (parseInt(inp.value) || 0) : defaultPxPort;
+      } else {
+        px = defaultPxPort;
+      }
+      portPxArr.push(px);
+    }
+    const totalPx       = portPxArr.reduce((s, v) => s + v, 0);
+    const maxPortPx     = Math.max(...portPxArr);
+    const totalAmps     = totalPx * ampsPerPixel;
+    const maxPortAmps   = maxPortPx * ampsPerPixel;
+    const totalWatts    = totalAmps * VOLTS;
+    const rwuTotalAmps   = totalPx * rwuAmpsPerPx;
+    const rwuTotalWatts  = rwuTotalAmps * VOLTS;
+    const rwuMaxPortAmps = maxPortPx * rwuAmpsPerPx;
+    const bankOver       = totalAmps > spec.maxAmpsPerBank;
+    const portOver       = spec.ampsPerPort ? maxPortAmps > spec.ampsPerPort : false;
+    const rwuBankOver    = rwuTotalAmps > spec.maxAmpsPerBank;
+    const rwuPortOver    = spec.ampsPerPort ? rwuMaxPortAmps > spec.ampsPerPort : false;
+    // avg px/port label: "uniform N" when all equal, "N–M" when mixed
+    const minPortPx     = Math.min(...portPxArr);
+    const pixPerPortLabel = (mode === 'port' && minPortPx !== maxPortPx)
+      ? `${minPortPx}–${maxPortPx} (mixed)` : `${maxPortPx}`;
+    bankData.push({ b, bankNum:b+1, portPxArr, pixPerPortLabel, totalPx, maxPortPx,
+      totalAmps, maxPortAmps, totalWatts, rwuTotalAmps, rwuTotalWatts, rwuMaxPortAmps,
+      bankOver, portOver, rwuBankOver, rwuPortOver,
+      portStart: b*spec.portsPerBank+1, portEnd: (b+1)*spec.portsPerBank });
+  }
+
+  // ── Greedy PSU grouping (bin-pack banks onto PSUs) ─────────────────────────
+  const psGroups = [];
+  let curBanks = [], curWatts = 0;
+  for (const bank of bankData) {
+    const bW = bank.totalWatts;
+    if (bW > usableWatts) {
+      // Bank alone exceeds one PS — flag and give it its own PS
+      if (curBanks.length) { psGroups.push({banks:[...curBanks], totalWatts:curWatts, overloaded:false}); curBanks=[]; curWatts=0; }
+      psGroups.push({banks:[bank.b], totalWatts:bW, overloaded:true});
+    } else if (curWatts + bW <= usableWatts) {
+      curBanks.push(bank.b); curWatts += bW;
+    } else {
+      psGroups.push({banks:[...curBanks], totalWatts:curWatts, overloaded:false});
+      curBanks=[bank.b]; curWatts=bW;
+    }
+  }
+  if (curBanks.length) psGroups.push({banks:[...curBanks], totalWatts:curWatts, overloaded:false});
+
+  const numPS = psGroups.length;
+  const psGroupData = psGroups.map((g, i) => {
+    const psAmps       = g.totalWatts / VOLTS;           // DC amps this PSU supplies
+    const vdropPigtail = pigtailOn ? psAmps * pigtailRes * 2 * pigtailLen : 0;
+    const pigtailOk    = pigtailOn ? psAmps <= pigtailAmpacity : true;
+    return {
+      ...g, psNum:i+1,
+      psAmps, vdropPigtail, pigtailOk,
+      acDraw:  g.totalWatts / ps.efficiency,
+      acAmps:  g.totalWatts / ps.efficiency / acV,
+      loadPct: g.totalWatts / usableWatts * 100,
+    };
+  });
+
+  // Build bank → PSU lookup (used for display in PSU allocation table)
+  const bankToPsu = {};
+  psGroupData.forEach(g => g.banks.forEach(bi => { bankToPsu[bi] = g; }));
+
+  // Per-bank: extension drop + injection analysis per port
+  bankData.forEach(b => {
+    b.portExtData = [];
+    b.portInjData = [];
+    b.portPxArr.forEach((px, i) => {
+      const portAmps    = px * ampsPerPixel;
+      const vdropCtoE   = portAmps * ctoERes * 2 * ctoELen;   // controller → ext connector
+      const vdropExt    = portAmps * extRes * 2 * extLen;       // ext connector → first pixel
+      const vdropPortTotal = vdropCtoE + vdropExt;
+      const ctoEPortOk  = ctoEOn ? portAmps <= ctoEAmpacity : true;
+      const extPortOk   = portAmps <= extAmpacity;
+      b.portExtData.push({ px, portAmps, vdropCtoE, vdropExt, vdropPortTotal, ctoEPortOk, extPortOk });
+
+      // ── Injection calc for this port ─────────────────────────────────────
+      // Budget = total voltage headroom minus this port's wiring drops
+      // (CtoE pigtail + extension). PSU→Ctrl wire is bank-level, excluded
+      // to keep identical pixel counts producing identical injection results.
+      const vBudget     = Math.max(0, totalBudget - vdropPortTotal);
+      const pixPerSegVd = (vBudget > 0 && ampsPerPixel > 0 && spacingFt > 0)
+        ? Math.floor(Math.sqrt(vBudget / (ampsPerPixel * injResPerFt * spacingFt)))
+        : 0;
+      const pixPerSegA  = ampsPerPixel > 0 ? Math.floor(injAmpacity / ampsPerPixel) : 999999;
+      // Port fuse constraint: controller fuse limits current through any single port run
+      const pixPerSegF  = (spec.ampsPerPort && ampsPerPixel > 0)
+        ? Math.floor(spec.ampsPerPort / ampsPerPixel) : 999999;
+      const pixPerSegRaw = pixPerSegVd > 0 ? Math.min(pixPerSegVd, pixPerSegA, pixPerSegF) : 0;
+      const pixPerSeg   = pixPerSegRaw > 0 ? Math.max(1, pixPerSegRaw) : 0;
+      // Track which constraint is binding (most restrictive)
+      let limitedBy = 'voltage';
+      if (pixPerSegVd > 0) {
+        if (pixPerSegF <= pixPerSegVd && pixPerSegF <= pixPerSegA) limitedBy = 'port fuse';
+        else if (pixPerSegA <= pixPerSegVd) limitedBy = 'inj wire';
+        else limitedBy = 'voltage';
+      }
+      const rwuPortAmps = px * rwuAmpsPerPx;
+      const numInj      = (pixPerSeg > 0 && px > pixPerSeg)
+        ? Math.ceil(px / pixPerSeg) - 1 : 0;
+      const injPositions = [];
+      for (let k = 1; k <= numInj; k++) injPositions.push(k * pixPerSeg);
+      const noBudget    = vBudget <= 0;
+
+      // ── RWU injection calc for this port ─────────────────────────────────
+      // Same algorithm but using rwuAmpsPerPx — lower current = less drop = longer segments
+      const rwuVdropPortTotal = rwuPortAmps * (ctoERes * 2 * ctoELen + extRes * 2 * extLen);
+      const rwuVBudget    = Math.max(0, totalBudget - rwuVdropPortTotal);
+      const rwuPixPerSegVd = (rwuVBudget > 0 && rwuAmpsPerPx > 0 && spacingFt > 0)
+        ? Math.floor(Math.sqrt(rwuVBudget / (rwuAmpsPerPx * injResPerFt * spacingFt))) : 0;
+      const rwuPixPerSegA = rwuAmpsPerPx > 0 ? Math.floor(injAmpacity / rwuAmpsPerPx) : 999999;
+      const rwuPixPerSegF = (spec.ampsPerPort && rwuAmpsPerPx > 0)
+        ? Math.floor(spec.ampsPerPort / rwuAmpsPerPx) : 999999;
+      const rwuPixPerSegRaw = rwuPixPerSegVd > 0
+        ? Math.min(rwuPixPerSegVd, rwuPixPerSegA, rwuPixPerSegF) : 0;
+      const rwuPixPerSeg  = rwuPixPerSegRaw > 0 ? Math.max(1, rwuPixPerSegRaw) : 0;
+      const rwuNumInj     = (rwuPixPerSeg > 0 && px > rwuPixPerSeg)
+        ? Math.ceil(px / rwuPixPerSeg) - 1 : 0;
+      const rwuInjPositions = [];
+      for (let k = 1; k <= rwuNumInj; k++) rwuInjPositions.push(k * rwuPixPerSeg);
+      const rwuNoBudget   = rwuVBudget <= 0;
+      const rwuNeedsInj   = rwuNumInj > 0 || rwuNoBudget;
+      const injSaved      = numInj - rwuNumInj;   // how many injection points RWU saves
+
+      b.portInjData.push({
+        portNum: b.portStart + i, px, portAmps, rwuPortAmps, vdropExt, vBudget,
+        pixPerSegVd, pixPerSegA, pixPerSegF, pixPerSeg, limitedBy,
+        numInj, injPositions, noBudget,
+        needsInj: numInj > 0 || noBudget,
+        // RWU injection
+        rwuVBudget, rwuPixPerSeg, rwuNumInj, rwuInjPositions, rwuNoBudget, rwuNeedsInj, injSaved,
+      });
+    });
+    b.maxCtoEDrop = Math.max(...b.portExtData.map(p => p.vdropCtoE), 0);
+    b.maxExtDrop  = Math.max(...b.portExtData.map(p => p.vdropExt), 0);
+    b.maxPortDrop = Math.max(...b.portExtData.map(p => p.vdropPortTotal), 0);
+    b.anyCtoEOver = b.portExtData.some(p => !p.ctoEPortOk);
+    b.anyExtOver  = b.portExtData.some(p => !p.extPortOk);
+    b.totalInj      = b.portInjData.reduce((s, p) => s + p.numInj, 0);
+    b.rwuTotalInj   = b.portInjData.reduce((s, p) => s + p.rwuNumInj, 0);
+    b.portsNeedInj  = b.portInjData.filter(p => p.needsInj).length;
+    b.rwuPortsNeedInj = b.portInjData.filter(p => p.rwuNeedsInj).length;
+  });
+
+  const totalDCWatts   = bankData.reduce((s,b) => s+b.totalWatts, 0);
+  const rwuTotalDCWatts = bankData.reduce((s,b) => s+b.rwuTotalWatts, 0);
+  const totalACWatts   = psGroupData.reduce((s,g) => s+g.acDraw, 0);
+  const totalACAmps    = totalACWatts / acV;
+  const totalPx        = bankData.reduce((s,b) => s+b.totalPx, 0);
+  const maxPigtailDrop = pigtailOn ? Math.max(...psGroupData.map(g => g.vdropPigtail), 0) : 0;
+  const maxCtoEDrop    = ctoEOn   ? Math.max(...bankData.map(b => b.maxCtoEDrop), 0) : 0;
+  const maxExtDrop     = bankData.length ? Math.max(...bankData.map(b => b.maxExtDrop), 0) : 0;
+  const maxPortAmps    = bankData.length ? Math.max(...bankData.map(b => b.maxPortAmps), 0) : 0;
+  const totalInjPoints    = bankData.reduce((s, b) => s + b.totalInj, 0);
+  const rwuTotalInjPoints = bankData.reduce((s, b) => s + b.rwuTotalInj, 0);
+  const totalPortsNeedInj    = bankData.reduce((s, b) => s + b.portsNeedInj, 0);
+  const rwuTotalPortsNeedInj = bankData.reduce((s, b) => s + b.rwuPortsNeedInj, 0);
+
+  // ── RWU PSU count: same greedy bin-packing using RWU watts per bank ────────
+  let rwuCurW = 0, rwuNumPS = 0;
+  for (const bank of bankData) {
+    const bW = bank.rwuTotalWatts;
+    if (bW > usableWatts) {
+      if (rwuCurW > 0) { rwuNumPS++; rwuCurW = 0; }
+      rwuNumPS++;
+    } else if (rwuCurW + bW <= usableWatts) {
+      rwuCurW += bW;
+    } else {
+      rwuNumPS++;
+      rwuCurW = bW;
+    }
+  }
+  if (rwuCurW > 0) rwuNumPS++;
+  const rwuAvgLoadPerPS = rwuNumPS ? rwuTotalDCWatts / rwuNumPS : 0;
+
+  // ── Greedy circuit bin-packing by actual AC amps per PSU ──────────────────
+  // (replaces the old uniform max-PSU-size approach which over-counted circuits)
+  const circuitGroups = [];
+  let curCircA = 0, curCircPSUs = [];
+  for (const g of psGroupData) {
+    if (g.acAmps > usableCircuitA) {
+      // This PSU alone exceeds a circuit — give it its own
+      if (curCircPSUs.length) { circuitGroups.push({ psus:[...curCircPSUs], totalA:curCircA, overloaded:false }); curCircPSUs=[]; curCircA=0; }
+      circuitGroups.push({ psus:[g.psNum], totalA:g.acAmps, overloaded:true });
+    } else if (curCircA + g.acAmps <= usableCircuitA) {
+      curCircPSUs.push(g.psNum); curCircA += g.acAmps;
+    } else {
+      circuitGroups.push({ psus:[...curCircPSUs], totalA:curCircA, overloaded:false });
+      curCircPSUs = [g.psNum]; curCircA = g.acAmps;
+    }
+  }
+  if (curCircPSUs.length) circuitGroups.push({ psus:curCircPSUs, totalA:curCircA, overloaded:false });
+  const numCircuits   = circuitGroups.length;
+  const psPerCircuit  = numCircuits ? Math.round(numPS / numCircuits * 10) / 10 : 1; // avg, for display
+
+  // RWU circuit count: same bin-packing using RWU AC amps (scaled by rwuFactor)
+  const rwuTotalACWatts = rwuTotalDCWatts / ps.efficiency;
+  const rwuTotalACAmps  = rwuTotalACWatts / acV;
+  // Each PSU's RWU AC amps scales by rwuFactor (load is proportional)
+  let rwuCircA = 0, rwuCircPSUs = [], rwuCircuitGroups = [];
+  for (const g of psGroupData) {
+    const rwuGA = g.acAmps * rwuFactor;
+    if (rwuGA > usableCircuitA) {
+      if (rwuCircPSUs.length) { rwuCircuitGroups.push(rwuCircPSUs.length); rwuCircPSUs=[]; rwuCircA=0; }
+      rwuCircuitGroups.push(1);
+    } else if (rwuCircA + rwuGA <= usableCircuitA) {
+      rwuCircPSUs.push(g.psNum); rwuCircA += rwuGA;
+    } else {
+      rwuCircuitGroups.push(rwuCircPSUs.length); rwuCircPSUs=[g.psNum]; rwuCircA=rwuGA;
+    }
+  }
+  if (rwuCircPSUs.length) rwuCircuitGroups.push(rwuCircPSUs.length);
+  const rwuNumCircuits = rwuCircuitGroups.length;
+
+  // ── Circuit rows ──────────────────────────────────────────────────────────
+  let circuitRows = '';
+  circuitGroups.forEach((cg, c) => {
+    const psuLabel = cg.psus.length === 1
+      ? 'PSU\u00a0' + cg.psus[0]
+      : 'PSU\u00a0' + cg.psus[0] + '\u2013' + cg.psus[cg.psus.length - 1];
+    const cW = psGroupData.filter(g => cg.psus.includes(g.psNum)).reduce((s,g) => s+g.acDraw, 0);
+    const ok = !cg.overloaded && cg.totalA <= usableCircuitA;
+    circuitRows += `<tr>
+      <td>Circuit ${c+1}</td>
+      <td>${psuLabel}</td>
+      <td>${cg.totalA.toFixed(2)}A / ${usableCircuitA.toFixed(1)}A usable</td>
+      <td>${cW.toFixed(0)}W</td>
+      <td><span class="badge ${ok?'badge-ok':'badge-danger'}">${ok?((cg.totalA/usableCircuitA*100).toFixed(0)+'% loaded'):'OVER LIMIT'}</span></td>
+    </tr>`;
+  });
+
+  // ── Bank rows ─────────────────────────────────────────────────────────────
+  const bankRows = bankData.map(b => {
+    const anyOver  = b.bankOver || b.portOver;
+    // Three-state severity: hardOver = theoretical AND RWU both over; softOver = theoretical only
+    const hardOver = (b.portOver && b.rwuPortOver) || (b.bankOver && b.rwuBankOver);
+    const softOver = anyOver && !hardOver;
+    const badgeClass = hardOver ? 'badge-danger' : softOver ? 'badge-warn' : 'badge-ok';
+    // Per-port detail sub-rows (only in per-port mode)
+    let portDetail = '';
+    if (mode === 'port') {
+      portDetail = `<tr style="background:rgba(0,0,0,.18);">
+        <td colspan="8" style="padding:4px 12px 8px 28px;">
+          <div style="display:flex; flex-wrap:wrap; gap:5px;">`;
+      b.portPxArr.forEach((px, i) => {
+        const portNum    = b.portStart + i;
+        const portAmps   = px * ampsPerPixel;
+        const rwuPortAmpsI = px * rwuAmpsPerPx;
+        // Theoretical over flags
+        const pOver        = !!(spec.ampsPerPort && portAmps > spec.ampsPerPort);
+        const ctoEPortOverI = ctoEOn && portAmps > ctoEAmpacity;
+        const extOver      = portAmps > extAmpacity;
+        const anyBad       = pOver || ctoEPortOverI || extOver;
+        // RWU over flags (same limits, RWU amps)
+        const rwuPOver     = !!(spec.ampsPerPort && rwuPortAmpsI > spec.ampsPerPort);
+        const rwuCtoEOver  = ctoEOn && rwuPortAmpsI > ctoEAmpacity;
+        const rwuExtOver   = rwuPortAmpsI > extAmpacity;
+        const rwuAnyBad    = rwuPOver || rwuCtoEOver || rwuExtOver;
+        // Three-state: hard = both over, soft = theoretical only
+        const chipHard = anyBad && rwuAnyBad;
+        const chipSoft = anyBad && !rwuAnyBad;
+        const chipBg    = chipHard ? 'rgba(239,68,68,.15)' : chipSoft ? 'rgba(245,158,11,.12)' : 'rgba(255,255,255,.05)';
+        const chipBorder= chipHard ? 'var(--danger)'       : chipSoft ? 'var(--warn)'          : 'var(--border)';
+        const chipColor = chipHard ? 'var(--danger)'       : chipSoft ? 'var(--warn)'          : 'var(--muted)';
+        const ctoeDropV  = portAmps * ctoERes * 2 * ctoELen;
+        const extDrop    = portAmps * extRes * 2 * extLen;
+        const dropStr = [
+          ctoEOn && ctoELen > 0 ? '&minus;'+ctoeDropV.toFixed(3)+'V c2e' : '',
+          extLen > 0             ? '&minus;'+extDrop.toFixed(3)+'V ext'   : '',
+        ].filter(Boolean).join('&thinsp;/&thinsp;');
+        const warnIcon = chipHard ? ' &#9888;' : chipSoft ? ' &#9651;' : '';
+        portDetail += `<span style="font-size:.72rem; padding:2px 7px; border-radius:4px;
+          background:${chipBg}; border:1px solid ${chipBorder};
+          color:${chipColor}; white-space:nowrap;">
+          P${portNum}: ${px}px&thinsp;/&thinsp;${portAmps.toFixed(2)}A<span style="color:var(--ok);">&thinsp;(~${rwuPortAmpsI.toFixed(2)}A)</span>${dropStr?'&thinsp;/&thinsp;'+dropStr:''}${warnIcon}
+        </span>`;
+      });
+      portDetail += `</div></td></tr>`;
+    }
+    return `<tr>
+    <td><strong>Bank ${b.bankNum}</strong></td>
+    <td style="color:var(--muted); font-size:.8rem;">Ports ${b.portStart}&ndash;${b.portEnd}</td>
+    <td>${b.pixPerPortLabel}</td>
+    <td>${b.totalPx.toLocaleString()}</td>
+    <td>${b.totalAmps.toFixed(2)} A
+      <br><span style="font-size:.72rem; color:var(--ok);">RWU ~${b.rwuTotalAmps.toFixed(2)}A</span>
+      ${spec.ampsPerPort ? (() => {
+        const portSoft = b.portOver && !b.rwuPortOver;
+        const portHard = b.portOver && b.rwuPortOver;
+        const portCol  = portHard ? 'var(--danger)' : portSoft ? 'var(--warn)' : 'var(--muted)';
+        return `<br><span style="font-size:.72rem; color:${portCol};">${b.maxPortAmps.toFixed(2)}A max/port (limit ${spec.ampsPerPort}A)<br>RWU ~${b.rwuMaxPortAmps.toFixed(2)}A/port</span>`;
+      })() : ''}</td>
+    <td>${b.totalWatts.toFixed(1)} W
+      <br><span style="font-size:.72rem; color:var(--ok);">RWU ~${b.rwuTotalWatts.toFixed(1)}W</span></td>
+    <td>${(ctoEOn || extLen > 0)
+      ? `${b.maxPortDrop.toFixed(3)}V max<br>
+         ${ctoEOn ? `<span style="font-size:.71rem;color:${b.anyCtoEOver?'var(--danger)':'var(--muted)'};">Ctrl&#8594;Ext: &minus;${b.maxCtoEDrop.toFixed(3)}V ${b.anyCtoEOver?' &#9888; over '+ctoEAmpacity+'A':''}</span><br>` : ''}
+         ${extLen > 0 ? `<span style="font-size:.71rem;color:${b.anyExtOver?'var(--danger)':'var(--muted)'};">Ext: &minus;${b.maxExtDrop.toFixed(3)}V ${b.anyExtOver?' &#9888; over '+extAmpacity+'A':''}</span>` : ''}`
+      : '<span style="color:var(--muted);font-size:.8rem;">—</span>'}</td>
+    <td><span class="badge ${badgeClass}">
+      ${b.portOver
+        ? '&#9888; '+b.maxPortAmps.toFixed(2)+'A/port EXCEEDS '+spec.ampsPerPort+'A limit'
+          +(b.rwuPortOver
+            ? ' &mdash; RWU also over (~'+b.rwuMaxPortAmps.toFixed(2)+'A)'
+            : ' &mdash; RWU OK (~'+b.rwuMaxPortAmps.toFixed(2)+'A)')
+        : b.bankOver
+          ? '&#9888; '+b.totalAmps.toFixed(1)+'A EXCEEDS '+spec.maxAmpsPerBank+'A bank limit'
+            +(b.rwuBankOver
+              ? ' &mdash; RWU also over (~'+b.rwuTotalAmps.toFixed(1)+'A)'
+              : ' &mdash; RWU OK (~'+b.rwuTotalAmps.toFixed(1)+'A)')
+          : 'OK &mdash; within '+spec.maxAmpsPerBank+'A bank / '+(spec.ampsPerPort?spec.ampsPerPort+'A port':'—')}
+    </span></td>
+  </tr>${portDetail}`;
+  }).join('');
+
+  // ── PS allocation rows ────────────────────────────────────────────────────
+  const psRows = psGroupData.map(g => `<tr>
+    <td><strong>PSU ${g.psNum}</strong></td>
+    <td>Bank${g.banks.length>1?'s':''}&nbsp;${g.banks.map(b=>b+1).join(', ')}</td>
+    <td>${(g.totalWatts/VOLTS).toFixed(2)}A &mdash; ${g.totalWatts.toFixed(1)}W DC</td>
+    <td><span class="badge ${g.overloaded?'badge-danger':g.loadPct>90?'badge-warn':'badge-ok'}">${g.loadPct.toFixed(0)}%</span></td>
+    ${pigtailOn ? `<td>${g.vdropPigtail.toFixed(3)}V
+      <br><span style="font-size:.72rem;color:${g.pigtailOk?'var(--muted)':'var(--danger)'};">
+        ${g.psAmps.toFixed(2)}A on ${pigtailGauge} AWG${g.pigtailOk?'':' &#9888; over '+pigtailAmpacity+'A'}
+      </span></td>` : ''}
+    <td>${g.acDraw.toFixed(1)}W / ${g.acAmps.toFixed(2)}A @ ${acV}V</td>
+    <td>${g.overloaded
+      ? '<span class="badge badge-danger">&#9888; Exceeds PS capacity &mdash; upgrade PS or split bank</span>'
+      : '<span class="badge badge-ok">OK</span>'}</td>
+  </tr>`).join('');
+
+  // ── Render ────────────────────────────────────────────────────────────────
+  document.getElementById('ctrlResults').innerHTML = `
+    <div class="results-grid">
+
+      <div class="card">
+        <div class="card-title">Controller</div>
+        <div class="card-value" style="font-size:1.35rem; line-height:1.2;">${spec.name}</div>
+        <div class="card-unit">${CONTROLLERS[brand].brand}</div>
+        <div class="card-detail">
+          <strong>${spec.ports} ports</strong> &bull; <strong>${spec.banks} banks</strong> &bull; <strong>${spec.portsPerBank} ports/bank</strong><br>
+          Max <strong>${spec.maxAmpsPerBank}A</strong> per bank terminal<br>
+          Pixel supply: <strong>${VOLTS}V</strong> &bull;
+          ${pixelType==='regulated'
+            ? '<span style="color:var(--ok)">Constant current regulated</span>'
+            : '<span style="color:var(--muted)">Resistor-limited (standard)</span>'}
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Total Pixels (all ports)</div>
+        <div class="card-value">${totalPx.toLocaleString()}</div>
+        <div class="card-unit">${VOLTS}V pixels, ${Math.round(brightness*100)}% brightness</div>
+        <div class="card-detail">
+          <strong>Total DC load (theoretical):</strong> ${totalDCWatts.toFixed(1)}W / ${(totalDCWatts/VOLTS).toFixed(2)}A<br>
+          <span style="color:var(--ok); font-size:.82rem;">&#9654; RWU est. (${Math.round(rwuFactor*100)}%):</span>
+          <span style="color:var(--ok); font-size:.82rem;"> ${rwuTotalDCWatts.toFixed(1)}W / ${(rwuTotalDCWatts/VOLTS).toFixed(2)}A</span><br>
+          <strong>Per pixel @ ${Math.round(brightness*100)}%:</strong> ${(ampsPerPixel*1000).toFixed(1)}mA / ${(wattsPerPixel*brightness).toFixed(3)}W<br>
+          <span style="color:var(--ok); font-size:.8rem;">RWU per px: ${(rwuAmpsPerPx*1000).toFixed(1)}mA / ${(wattsPerPixel*brightness*rwuFactor).toFixed(3)}W</span><br>
+          <strong>Port config:</strong> ${mode === 'port' ? 'Per-port (individual)' : mode === 'bank' ? 'Per-bank (varies)' : defaultPxPort+' px/port uniform'}
+        </div>
+      </div>
+
+      <div class="card ${numPS > 12 ? 'warn':'ok'}">
+        <div class="card-title">Power Supplies Required</div>
+        <div class="card-value">${numPS}</div>
+        <div class="card-unit">${ps.name}</div>
+        <div class="card-detail">
+          <strong>Rated:</strong> ${ps.watts}W / ${ps.volts}V / ${ps.amps}A<br>
+          <strong>Usable (${Math.round(psDerate*100)}%):</strong> ${usableWatts.toFixed(0)}W / ${usableAmps.toFixed(1)}A<br>
+          <strong>Avg load/PSU:</strong> ${numPS ? (totalDCWatts/numPS).toFixed(1)+'W ('+((totalDCWatts/numPS)/usableWatts*100).toFixed(0)+'%)' : '—'}<br>
+          <span style="color:var(--ok); font-size:.82rem;">&#9654; RWU est. (${Math.round(rwuFactor*100)}%):
+            <strong style="color:var(--ok);">${rwuNumPS} PSU${rwuNumPS!==1?'s':''}</strong>
+            &mdash; avg ${rwuAvgLoadPerPS.toFixed(1)}W (${usableWatts>0?(rwuAvgLoadPerPS/usableWatts*100).toFixed(0):'—'}% load)
+            ${rwuNumPS < numPS ? '<span style="color:var(--muted); font-size:.78rem;">&nbsp;(saves '+(numPS-rwuNumPS)+' PSU'+(numPS-rwuNumPS>1?'s':'')+')</span>' : ''}
+          </span>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">AC Circuits Required</div>
+        <div class="card-value">${numCircuits}</div>
+        <div class="card-unit">${breakerA}A breakers &bull; ${Math.round(acSafety*100)}% NEC rule</div>
+        <div class="card-detail">
+          <strong>Total AC draw:</strong> ${totalACWatts.toFixed(0)}W / ${totalACAmps.toFixed(2)}A<br>
+          <strong>Usable/circuit:</strong> ${usableCircuitA.toFixed(1)}A / ${(usableCircuitA*acV).toFixed(0)}W<br>
+          <strong>Avg PSUs/circuit:</strong> ${numCircuits ? (numPS/numCircuits).toFixed(1) : '—'}<br>
+          <span style="color:var(--ok); font-size:.82rem;">&#9654; RWU est. (${Math.round(rwuFactor*100)}%):
+            <strong style="color:var(--ok);">${rwuNumCircuits} circuit${rwuNumCircuits!==1?'s':''}</strong>
+            &mdash; ${rwuTotalACAmps.toFixed(2)}A / ${rwuTotalACWatts.toFixed(0)}W total AC
+            ${rwuNumCircuits < numCircuits ? '<span style="color:var(--muted); font-size:.78rem;">&nbsp;(saves '+(numCircuits-rwuNumCircuits)+' circuit'+(numCircuits-rwuNumCircuits>1?'s':'')+')</span>' : ''}
+          </span>
+        </div>
+      </div>
+
+      <div class="card ${(pigtailOn && !psGroupData.every(g=>g.pigtailOk)) || bankData.some(b=>b.anyCtoEOver) || bankData.some(b=>b.anyExtOver) ? 'danger' : 'ok'}">
+        <div class="card-title">DC Wiring Drops</div>
+        <div class="card-value" style="font-size:1.4rem;">
+          ${(maxPigtailDrop + maxCtoEDrop + maxExtDrop).toFixed(3)}<span style="font-size:1rem;">V</span>
+        </div>
+        <div class="card-unit">worst-case total (all wiring segments)</div>
+        <div class="card-detail">
+          ${pigtailOn
+            ? `<strong>PSU&#8594;Ctrl (${pigtailGauge} AWG, ${pigtailLen} ft):</strong>
+               &minus;${maxPigtailDrop.toFixed(3)}V max<br>
+               <span style="font-size:.76rem; color:var(--muted);">
+                 Highest-loaded PSU: ${Math.max(...psGroupData.map(g=>g.psAmps)).toFixed(2)}A
+                 ${psGroupData.some(g=>!g.pigtailOk)?'<span style="color:var(--danger)"> &#9888; Exceeds '+pigtailAmpacity+'A ampacity</span>':''}
+               </span><br>`
+            : '<span style="color:var(--muted);">No PSU&#8594;Ctrl wire included</span><br>'}
+          ${ctoEOn
+            ? `<strong>Ctrl&#8594;Ext (${ctoEGauge} AWG, ${ctoELen} ft):</strong>
+               &minus;${maxCtoEDrop.toFixed(3)}V max<br>
+               <span style="font-size:.76rem; color:var(--muted);">
+                 Highest port: ${maxPortAmps.toFixed(2)}A
+                 ${bankData.some(b=>b.anyCtoEOver)?'<span style="color:var(--danger)"> &#9888; Exceeds '+ctoEAmpacity+'A ampacity on some ports</span>':''}
+               </span><br>`
+            : '<span style="color:var(--muted);">No Ctrl&#8594;Ext wire included</span><br>'}
+          <strong>Extension (${extGauge} AWG, ${extLen} ft):</strong>
+          &minus;${maxExtDrop.toFixed(3)}V max<br>
+          <span style="font-size:.76rem; color:var(--muted);">
+            Highest port: ${maxPortAmps.toFixed(2)}A
+            ${bankData.some(b=>b.anyExtOver)?'<span style="color:var(--danger)"> &#9888; Exceeds '+extAmpacity+'A ampacity on some ports</span>':''}
+          </span>
+        </div>
+      </div>
+
+      <div class="card ${totalPortsNeedInj > 0 ? 'warn' : 'ok'}">
+        <div class="card-title">Power Injection Needed</div>
+        <div class="card-value">${totalInjPoints}</div>
+        <div class="card-unit">total injection point${totalInjPoints !== 1 ? 's' : ''} across all ports (theoretical)</div>
+        <div class="card-detail">
+          <strong>${totalPortsNeedInj}</strong> of <strong>${spec.ports}</strong> ports need injection<br>
+          Inj wire: <strong>${injGauge} AWG</strong> &bull;
+          Spacing: <strong>${densityVal === 'custom'
+            ? (parseFloat(document.getElementById('ctrlCustomSpacing').value)||4)+'"'
+            : densityVal+'"'}</strong>/pixel &bull;
+          Seg size: <strong>${bankData[0]?.portInjData[0]?.pixPerSeg ?? '—'} px max</strong><br>
+          Min pixel V: <strong>${minV}V</strong> &bull; Budget: <strong>${totalBudget.toFixed(2)}V</strong>
+          ${spec.ampsPerPort
+            ? `<br><span style="color:var(--muted); font-size:.8rem;">Port fuse: <strong style="color:var(--text)">${spec.ampsPerPort}A</strong> &bull; max px/seg (fuse): <strong style="color:var(--text)">${ampsPerPixel>0?Math.floor(spec.ampsPerPort/ampsPerPixel):'—'}</strong></span>`
+            : ''}
+          <br><span style="color:var(--ok); font-size:.82rem;">&#9654; RWU est. (${Math.round(rwuFactor*100)}%):
+            <strong style="color:var(--ok);">${rwuTotalInjPoints} point${rwuTotalInjPoints!==1?'s':''}</strong>
+            on <strong style="color:var(--ok);">${rwuTotalPortsNeedInj}</strong> port${rwuTotalPortsNeedInj!==1?'s':''}
+            ${totalInjPoints > rwuTotalInjPoints
+              ? `<span style="color:var(--muted); font-size:.78rem;">&nbsp;(saves ${totalInjPoints-rwuTotalInjPoints} injection point${totalInjPoints-rwuTotalInjPoints>1?'s':''})</span>`
+              : ''}
+          </span>
+          ${totalPortsNeedInj === 0
+            ? '<br><span style="color:var(--ok);">&#10003; All ports within voltage budget — no injection required</span>'
+            : ''}
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Per-bank breakdown -->
+    <div class="result-section">
+      <div class="result-section-header">&#9889; Per-Bank Power Breakdown &mdash; ${spec.name}</div>
+      <div class="result-section-body" style="padding:0">
+        <table>
+          <thead><tr>
+            <th>Bank</th><th>Ports</th><th>Px/Port</th><th>Total Pixels</th>
+            <th>DC Amps</th><th>DC Watts</th><th>Ext Drop (max)</th><th>Bank Terminal Status</th>
+          </tr></thead>
+          <tbody>${bankRows}</tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Power Injection Map -->
+    <div class="result-section">
+      <div class="result-section-header">&#9889; Power Injection Map &mdash; Per-Port String Analysis</div>
+      <div class="result-section-body" style="padding:12px 16px 16px;">
+        ${(() => {
+          // Colour palette — one colour per bank, alternating segment shades
+          const bankColours = ['#4f8ef7','#7c3aed','#22c55e','#f59e0b','#ef4444','#14b8a6','#f97316','#a855f7'];
+          const segColours  = [['#4f8ef7','#3a6fd4'],['#7c3aed','#5b2bb0'],['#22c55e','#17913f'],
+                               ['#f59e0b','#c97d06'],['#ef4444','#bf2828'],['#14b8a6','#0d8a80'],
+                               ['#f97316','#c75a0d'],['#a855f7','#7e2ec4']];
+          let html = '';
+          bankData.forEach(b => {
+            const bColour  = bankColours[b.b % bankColours.length];
+            const bSegs    = segColours[b.b % segColours.length];
+            const hasInj    = b.portsNeedInj > 0;
+            const rwuHasInj = b.rwuPortsNeedInj > 0;
+            html += `<div style="margin-bottom:18px;">
+              <div style="font-size:.78rem; font-weight:700; color:${bColour};
+                letter-spacing:.5px; text-transform:uppercase; margin-bottom:6px;
+                padding-bottom:4px; border-bottom:1px solid ${bColour}33;">
+                Bank ${b.bankNum} &mdash; Ports ${b.portStart}&ndash;${b.portEnd}
+                ${hasInj
+                  ? '<span style="background:rgba(245,158,11,.15); color:var(--warn); font-size:.7rem; padding:1px 7px; border-radius:4px; margin-left:6px;">'+b.portsNeedInj+' port'+(b.portsNeedInj>1?'s':'')+' need injection</span>'
+                  : '<span style="background:rgba(34,197,94,.12); color:var(--ok); font-size:.7rem; padding:1px 7px; border-radius:4px; margin-left:6px;">&#10003; no injection needed</span>'}
+                ${rwuHasInj
+                  ? '<span style="background:rgba(34,197,94,.10); color:var(--ok); font-size:.7rem; padding:1px 7px; border-radius:4px; margin-left:4px;">RWU: '+b.rwuPortsNeedInj+' port'+(b.rwuPortsNeedInj>1?'s':'')+' need injection</span>'
+                  : '<span style="background:rgba(34,197,94,.10); color:var(--ok); font-size:.7rem; padding:1px 7px; border-radius:4px; margin-left:4px;">RWU &#10003; none needed</span>'}
+              </div>`;
+            b.portInjData.forEach(p => {
+              const totalPx  = Math.max(p.px, 1);
+
+              // ── Theoretical bar ─────────────────────────────────────────
+              let segHtml = '';
+              if (p.px === 0) {
+                segHtml = `<div style="flex:1; background:var(--panel2); border-radius:3px; display:flex; align-items:center; justify-content:center;">
+                  <span style="font-size:.68rem; color:var(--muted);">0 px</span></div>`;
+              } else if (p.noBudget) {
+                segHtml = `<div style="flex:1; background:rgba(239,68,68,.4); border-radius:3px; display:flex; align-items:center; justify-content:center;">
+                  <span style="font-size:.68rem; color:var(--danger); font-weight:700;">NO BUDGET</span></div>`;
+              } else if (p.numInj === 0) {
+                segHtml = `<div style="flex:1; background:${bSegs[0]}; border-radius:3px; opacity:.85;"></div>`;
+              } else {
+                const segs = [...p.injPositions, p.px];
+                let prev = 0;
+                segs.forEach((end, si) => {
+                  const w   = ((end - prev) / totalPx * 100).toFixed(2);
+                  const col = bSegs[si % 2];
+                  if (si > 0) segHtml += `<div style="width:2px; background:rgba(255,255,255,.9); flex-shrink:0;" title="Inj @ px ${prev}"></div>`;
+                  segHtml += `<div style="width:${w}%; background:${col}; opacity:.9;" title="Seg ${si+1}: px ${prev+1}–${end}"></div>`;
+                  prev = end;
+                });
+              }
+
+              // ── RWU bar (green) ─────────────────────────────────────────
+              let rwuSegHtml = '';
+              if (p.px === 0) {
+                rwuSegHtml = `<div style="flex:1; background:var(--panel2); border-radius:2px;"></div>`;
+              } else if (p.rwuNoBudget) {
+                rwuSegHtml = `<div style="flex:1; background:rgba(239,68,68,.3); border-radius:2px;"></div>`;
+              } else if (p.rwuNumInj === 0) {
+                rwuSegHtml = `<div style="flex:1; background:rgba(34,197,94,.5); border-radius:2px;"></div>`;
+              } else {
+                const rwuSegs = [...p.rwuInjPositions, p.px];
+                let prev = 0;
+                rwuSegs.forEach((end, si) => {
+                  const w = ((end - prev) / totalPx * 100).toFixed(2);
+                  const col = si % 2 === 0 ? 'rgba(34,197,94,.6)' : 'rgba(20,184,166,.6)';
+                  if (si > 0) rwuSegHtml += `<div style="width:2px; background:rgba(34,197,94,.95); flex-shrink:0;" title="RWU inj @ px ${prev}"></div>`;
+                  rwuSegHtml += `<div style="width:${w}%; background:${col};" title="RWU seg ${si+1}: px ${prev+1}–${end}"></div>`;
+                  prev = end;
+                });
+              }
+
+              const statusCol = p.needsInj ? 'var(--warn)' : 'var(--ok)';
+              const injLabel  = p.numInj > 0
+                ? p.injPositions.map(pos => 'px\u00a0'+pos).join(', ')
+                : p.noBudget ? 'No budget' : 'None';
+              const rwuLabel  = p.rwuNumInj > 0
+                ? p.rwuInjPositions.map(pos => 'px\u00a0'+pos).join(', ')
+                : p.rwuNoBudget ? 'No budget' : 'None';
+              const limitChip = p.limitedBy === 'port fuse'
+                ? `<span style="font-size:.62rem; padding:1px 4px; border-radius:3px; background:rgba(245,158,11,.18); color:var(--warn); margin-left:2px;" title="Port fuse (${p.pixPerSegF} px max)">fuse</span>`
+                : p.limitedBy === 'inj wire'
+                  ? `<span style="font-size:.62rem; padding:1px 4px; border-radius:3px; background:rgba(124,58,237,.18); color:#a78bfa; margin-left:2px;" title="Inj wire (${p.pixPerSegA} px max)">wire</span>`
+                  : '';
+              const savedChip = p.injSaved > 0
+                ? `<span style="font-size:.62rem; padding:1px 4px; border-radius:3px; background:rgba(34,197,94,.15); color:var(--ok); margin-left:2px;">&#8722;${p.injSaved}</span>`
+                : p.injSaved < 0
+                  ? `<span style="font-size:.62rem; padding:1px 4px; border-radius:3px; background:rgba(239,68,68,.12); color:var(--danger); margin-left:2px;">+${-p.injSaved}</span>`
+                  : '';
+
+              html += `<div style="display:grid; grid-template-columns:38px 70px 80px 1fr 110px;
+                align-items:start; gap:6px; margin-bottom:7px;">
+                <div style="font-size:.78rem; font-weight:700; color:var(--text); text-align:center;
+                  background:${bColour}22; border-radius:4px; padding:3px 0; margin-top:1px;">P${p.portNum}</div>
+                <div style="font-size:.74rem; color:var(--muted); line-height:1.55;">
+                  ${p.px}\u00a0px<br>
+                  <span style="color:var(--ok);">~${p.rwuPortAmps.toFixed(2)}A</span>
+                </div>
+                <div style="font-size:.72rem; line-height:1.6;">
+                  <div style="color:${statusCol}; font-weight:600;">
+                    ${p.numInj > 0 ? p.numInj+'\u00a0inj'+limitChip : p.noBudget ? '&#9888;\u00a0no budget' : '&#10003;\u00a0OK'}
+                  </div>
+                  <div style="color:var(--ok);">
+                    RWU: ${p.rwuNumInj > 0 ? p.rwuNumInj+'\u00a0inj' : p.rwuNoBudget ? '&#9888;\u00a0no budget' : '&#10003;\u00a0OK'}${savedChip}
+                  </div>
+                </div>
+                <div style="display:flex; flex-direction:column; gap:3px; min-width:0;">
+                  <div style="height:11px; border-radius:3px; overflow:hidden; display:flex;" title="Theoretical">${segHtml}</div>
+                  <div style="height:7px; border-radius:2px; overflow:hidden; display:flex;" title="RWU estimate">${rwuSegHtml}</div>
+                </div>
+                <div style="font-size:.67rem; color:var(--muted); line-height:1.6; overflow:hidden;">
+                  <div style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${injLabel}">${injLabel}</div>
+                  <div style="color:var(--ok); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="RWU: ${rwuLabel}">RWU:\u00a0${rwuLabel}</div>
+                </div>
+              </div>`;
+            });
+            html += `</div>`;
+          });
+          return html;
+        })()}
+        <div style="margin-top:8px; padding:8px 10px; background:rgba(255,255,255,.03);
+          border-radius:6px; font-size:.73rem; color:var(--muted); line-height:1.7;">
+          <strong style="color:var(--text);">Top bar</strong> = theoretical injection (bank colour) &bull;
+          <strong style="color:var(--ok);">Bottom bar</strong> = RWU estimate (green) &bull;
+          white dividers = theoretical injection points &bull; green dividers = RWU injection points.<br>
+          Spacing: <strong style="color:var(--text);">${(() => {
+            const dv = document.getElementById('ctrlDensity').value;
+            return dv === 'custom'
+              ? (parseFloat(document.getElementById('ctrlCustomSpacing').value)||4)+'"'
+              : dv+'"';
+          })()} / pixel</strong> &bull;
+          Inj wire: <strong style="color:var(--text);">${injGauge} AWG (${injAmpacity}A)</strong> &bull;
+          Min pixel V: <strong style="color:var(--text);">${minV}V</strong>
+          ${ctoEOn ? `&bull; Ctrl&#8594;Ext: <strong style="color:var(--text);">${ctoEGauge} AWG, ${ctoELen} ft</strong>` : ''}<br>
+          Chips: <span style="padding:1px 5px; border-radius:3px; background:rgba(245,158,11,.18); color:var(--warn); font-size:.68rem;">fuse</span> port fuse &bull;
+          <span style="padding:1px 5px; border-radius:3px; background:rgba(124,58,237,.18); color:#a78bfa; font-size:.68rem;">wire</span> inj wire ampacity &bull;
+          <span style="padding:1px 5px; border-radius:3px; background:rgba(34,197,94,.15); color:var(--ok); font-size:.68rem;">&#8722;N</span> injection points saved by RWU
+        </div>
+      </div>
+    </div>
+
+    <!-- PSU allocation -->
+    <div class="result-section">
+      <div class="result-section-header">&#128268; PSU Allocation &mdash; Optimal Bank Grouping onto Power Supplies</div>
+      <div class="result-section-body" style="padding:0">
+        <table>
+          <thead><tr>
+            <th>PSU #</th><th>Banks Served</th><th>DC Load</th>
+            <th>PS Utilization</th>${pigtailOn?'<th>PSU&#8594;Ctrl Drop</th>':''}<th>AC Draw</th><th>Status</th>
+          </tr></thead>
+          <tbody>${psRows}</tbody>
+        </table>
+        <p style="margin:12px 18px 16px; font-size:.8rem; color:var(--muted); line-height:1.75;">
+          Banks are grouped to maximise PSU utilisation within the
+          <strong style="color:var(--text)">${usableWatts.toFixed(0)}W</strong> usable capacity per ${ps.name}
+          (${Math.round(psDerate*100)}% derate). Wire each grouped bank&rsquo;s power input terminal directly
+          to the same PSU output. All PSUs <strong style="color:var(--text)">must share a common ground</strong>
+          if using a shared pixel data signal across banks.
+        </p>
+      </div>
+    </div>
+
+    <!-- AC circuit distribution -->
+    <div class="result-section">
+      <div class="result-section-header">&#128267; AC Circuit Distribution (${breakerA}A @ ${acV}V &bull; ${Math.round(acSafety*100)}% NEC rule)</div>
+      <div class="result-section-body" style="padding:0">
+        <table>
+          <thead><tr>
+            <th>Circuit</th><th>PSUs on Circuit</th><th>AC Current Load</th><th>AC Watt Load</th><th>Status</th>
+          </tr></thead>
+          <tbody>${circuitRows}</tbody>
+        </table>
+        <p style="margin:12px 18px 16px; font-size:.8rem; color:var(--muted);">
+          NEC 80% rule: a ${breakerA}A circuit may carry
+          <strong style="color:var(--text)">${usableCircuitA.toFixed(1)}A</strong> continuously.
+          Each ${ps.name} draws up to
+          <strong style="color:var(--text)">${(ps.watts/ps.efficiency/acV).toFixed(2)}A AC</strong> at full rated load.
+        </p>
+      </div>
+    </div>
+
+    <!-- RWU definition note -->
+    <div style="padding:11px 15px; background:rgba(79,142,247,.06); border:1px solid rgba(79,142,247,.2);
+      border-radius:8px; font-size:.78rem; color:var(--muted); line-height:1.75; margin-bottom:10px;">
+      <strong style="color:var(--accent)">&#9432; RWU &mdash; Real World Usage (${Math.round(rwuFactor*100)}%)</strong><br>
+      Theoretical draw assumes every pixel at 100% white simultaneously &mdash; the absolute worst case.
+      RWU (${Math.round(rwuFactor*100)}%) represents typical real-world draw accounting for mixed colours,
+      animation patterns, and brightness variance. WS2811 at 100% white commonly draws
+      <strong style="color:var(--text)">70&ndash;85%</strong> of theoretical max.
+      RWU figures are for planning guidance only &mdash; all safety-critical calculations
+      (fuse sizing, wire ampacity, injection) use conservative theoretical values.<br>
+      <span style="display:inline-flex; align-items:center; gap:10px; margin-top:4px; flex-wrap:wrap;">
+        <span><span style="display:inline-block; width:10px; height:10px; border-radius:2px; background:var(--ok); margin-right:4px;"></span>OK &mdash; within limits</span>
+        <span><span style="display:inline-block; width:10px; height:10px; border-radius:2px; background:var(--warn); margin-right:4px;"></span>Over theoretical limit &mdash; RWU within limit</span>
+        <span><span style="display:inline-block; width:10px; height:10px; border-radius:2px; background:var(--danger); margin-right:4px;"></span>Over both theoretical &amp; RWU limits</span>
+      </span>
+    </div>
+
+    <!-- Notes -->
+    <div style="padding:12px 16px; background:rgba(245,158,11,.08); border:1px solid rgba(245,158,11,.25);
+      border-radius:8px; font-size:.78rem; color:var(--muted); line-height:1.75; margin-bottom:12px;">
+      <strong style="color:var(--warn)">Important:</strong>
+      Per-bank terminal ratings are the board&rsquo;s stated limits &mdash; actual trace and connector specs vary by board revision; verify against your specific board documentation.
+      Controller mode calculates power sizing only &mdash; use <strong style="color:var(--text)">String Power Needs</strong> mode
+      to plan voltage drop and injection spacing for individual port runs.
+      All PSU recommendations assume the selected model at the selected derate factor.
+    </div>
+  `;
+}
+
+// ── Init controller mode on first load ────────────────────────────────────
+(function initControllerMode() {
+  onCtrlBrandChange();   // populates model dropdown → triggers onCtrlModelChange → onCtrlVoltageChange
+})();
+
+// Close tooltip when clicking outside
+document.addEventListener('click', e => {
+  if (!tipEl.contains(e.target) && !e.target.classList.contains('info-btn')) {
+    closeTip();
+  }
+});
+</script>
+</body>
+</html>
