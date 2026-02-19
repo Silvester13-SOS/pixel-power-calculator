@@ -931,6 +931,116 @@
       <input type="number" id="mtCustomStrands" value="20" min="3" max="100">
     </div>
 
+    <!-- Pixel Configuration Section -->
+    <div class="section-label">Pixel Configuration</div>
+
+    <div class="field">
+      <label>Pixel Supply Voltage</label>
+      <div style="display:flex; gap:8px; margin-top:2px;">
+        <label style="flex:1; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:6px;
+          padding:9px 8px; background:var(--panel2); border:2px solid var(--accent);
+          border-radius:7px; font-weight:700; color:var(--text); font-size:.9rem;" id="mtVolt12Label">
+          <input type="radio" name="mtVoltage" value="12" checked onchange="onMtVoltageChange()" style="accent-color:var(--accent);">
+          12V
+        </label>
+        <label style="flex:1; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:6px;
+          padding:9px 8px; background:var(--panel2); border:2px solid var(--border);
+          border-radius:7px; font-weight:700; color:var(--muted); font-size:.9rem;" id="mtVolt5Label">
+          <input type="radio" name="mtVoltage" value="5" onchange="onMtVoltageChange()" style="accent-color:var(--accent);">
+          5V
+        </label>
+      </div>
+    </div>
+
+    <div class="field">
+      <label>Pixel Construction</label>
+      <div style="display:flex; gap:8px; margin-top:2px;">
+        <label style="flex:1; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:6px;
+          padding:9px 8px; background:var(--panel2); border:2px solid var(--accent);
+          border-radius:7px; font-weight:700; color:var(--text); font-size:.85rem;" id="mtPixResistorLabel">
+          <input type="radio" name="mtPixelType" value="resistor" checked onchange="onMtPixelTypeChange()" style="accent-color:var(--accent);">
+          Resistor
+        </label>
+        <label style="flex:1; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:6px;
+          padding:9px 8px; background:var(--panel2); border:2px solid var(--border);
+          border-radius:7px; font-weight:700; color:var(--muted); font-size:.85rem;" id="mtPixRegulatedLabel">
+          <input type="radio" name="mtPixelType" value="regulated" onchange="onMtPixelTypeChange()" style="accent-color:var(--accent);">
+          Regulated
+        </label>
+      </div>
+    </div>
+
+    <div class="field">
+      <label>Pixels per Strand</label>
+      <select id="mtPixelMode" onchange="toggleMtPixelMode()">
+        <option value="uniform" selected>Uniform (same for all strands)</option>
+        <option value="calculated">Auto-Calculate from Spacing</option>
+      </select>
+    </div>
+
+    <div class="field" id="mtUniformPixelField">
+      <label>Pixels per Strand (uniform)</label>
+      <input type="number" id="mtPixelsPerStrand" value="50" min="1" max="500">
+    </div>
+
+    <div class="field" id="mtSpacingField" style="display:none">
+      <label>Pixel Spacing (inches)</label>
+      <input type="number" id="mtPixelSpacing" value="4" min="0.5" max="24" step="0.5">
+    </div>
+
+    <div class="field">
+      <label>Watts per Pixel at 100% White</label>
+      <input type="number" id="mtWattsPerPixel" value="0.60" min="0.01" max="5" step="0.01">
+    </div>
+
+    <div class="field">
+      <label>Brightness Level</label>
+      <div class="slider-wrap">
+        <input type="range" id="mtBrightness" min="1" max="100" value="100"
+          oninput="document.getElementById('mtBrightnessVal').textContent=this.value+'%'">
+        <div class="slider-val" id="mtBrightnessVal">100%</div>
+      </div>
+    </div>
+
+    <div class="field">
+      <label>Real World Usage (RWU) Factor</label>
+      <div class="slider-wrap">
+        <input type="range" id="mtRwuFactor" min="45" max="100" value="80"
+          oninput="document.getElementById('mtRwuFactorVal').textContent=this.value+'%'">
+        <div class="slider-val" id="mtRwuFactorVal">80%</div>
+      </div>
+    </div>
+
+    <!-- Power & Wiring Section -->
+    <div class="section-label">Power & Wiring</div>
+
+    <div class="field">
+      <label>Strand Feed Wire Gauge</label>
+      <select id="mtStrandGauge">
+        <option value="14">14 AWG (15A)</option>
+        <option value="16">16 AWG (13A)</option>
+        <option value="18" selected>18 AWG (7A) — typical strand feed</option>
+        <option value="20">20 AWG (5A)</option>
+      </select>
+    </div>
+
+    <!-- Power Supply Settings -->
+    <div class="section-label">Power Supply Settings</div>
+
+    <div class="field">
+      <label>Power Supply Model</label>
+      <select id="mtPsModel"></select>
+    </div>
+
+    <div class="field">
+      <label>PS Derate Factor</label>
+      <select id="mtPsDerate">
+        <option value="0.8" selected>80% — recommended</option>
+        <option value="0.9">90% — cool / ventilated location</option>
+        <option value="1.0">100% — not recommended</option>
+      </select>
+    </div>
+
     <button class="calc-btn" onclick="calculateMegatree()">&#127794; Calculate Megatree</button>
 
   </div><!-- /sidebar -->
@@ -1016,6 +1126,48 @@ function toggleMtCustomTaper() {
 function toggleMtCustomStrands() {
   const count = document.getElementById('mtStrandCount').value;
   document.getElementById('mtCustomStrandField').style.display = count === 'custom' ? 'block' : 'none';
+}
+function toggleMtPixelMode() {
+  const mode = document.getElementById('mtPixelMode').value;
+  document.getElementById('mtUniformPixelField').style.display = mode === 'uniform' ? 'block' : 'none';
+  document.getElementById('mtSpacingField').style.display = mode === 'calculated' ? 'block' : 'none';
+}
+function getMtVolts() {
+  return parseInt(document.querySelector('input[name="mtVoltage"]:checked').value);
+}
+function getMtPixelType() {
+  return document.querySelector('input[name="mtPixelType"]:checked').value;
+}
+function onMtVoltageChange() {
+  const volts = getMtVolts();
+  const def = VOLT_DEFAULTS[volts];
+
+  // Update toggle styles
+  document.getElementById('mtVolt12Label').style.borderColor = volts===12?'var(--accent)':'var(--border)';
+  document.getElementById('mtVolt12Label').style.color = volts===12?'var(--text)':'var(--muted)';
+  document.getElementById('mtVolt5Label').style.borderColor = volts===5?'var(--accent)':'var(--border)';
+  document.getElementById('mtVolt5Label').style.color = volts===5?'var(--text)':'var(--muted)';
+
+  // Update watts per pixel
+  document.getElementById('mtWattsPerPixel').value = def.wattsPerPixel;
+
+  // Rebuild PS dropdown
+  const sel = document.getElementById('mtPsModel');
+  sel.innerHTML = '';
+  Object.entries(PS_MODELS).filter(([, ps]) => ps.volts === volts).forEach(([key, ps]) => {
+    const opt = document.createElement('option');
+    opt.value = key;
+    opt.textContent = `${ps.name} — ${ps.watts}W / ${ps.volts}V / ${ps.amps}A`;
+    if (key === def.defaultPS) opt.selected = true;
+    sel.appendChild(opt);
+  });
+}
+function onMtPixelTypeChange() {
+  const type = getMtPixelType();
+  document.getElementById('mtPixResistorLabel').style.borderColor = type==='resistor'?'var(--accent)':'var(--border)';
+  document.getElementById('mtPixResistorLabel').style.color = type==='resistor'?'var(--text)':'var(--muted)';
+  document.getElementById('mtPixRegulatedLabel').style.borderColor = type==='regulated'?'var(--accent)':'var(--border)';
+  document.getElementById('mtPixRegulatedLabel').style.color = type==='regulated'?'var(--text)':'var(--muted)';
 }
 
 function updateCtrlMinV() {
@@ -3095,6 +3247,25 @@ function _calculateMegatree() {
     ? parseInt(document.getElementById('mtCustomStrands').value)
     : parseInt(strandCountVal);
 
+  const pixelMode = document.getElementById('mtPixelMode').value;
+  const uniformPixels = pixelMode === 'uniform'
+    ? parseInt(document.getElementById('mtPixelsPerStrand').value)
+    : 0;
+  const pixelSpacing = pixelMode === 'calculated'
+    ? parseFloat(document.getElementById('mtPixelSpacing').value)
+    : 0;
+
+  const VOLTS = getMtVolts();
+  const pixelType = getMtPixelType();
+  const wattsPerPixel = parseFloat(document.getElementById('mtWattsPerPixel').value);
+  const brightness = parseFloat(document.getElementById('mtBrightness').value) / 100;
+  const rwuFactor = parseFloat(document.getElementById('mtRwuFactor').value) / 100;
+
+  const strandGauge = parseInt(document.getElementById('mtStrandGauge').value);
+
+  const ps = PS_MODELS[document.getElementById('mtPsModel').value];
+  const psDerate = parseFloat(document.getElementById('mtPsDerate').value);
+
   // ── Geometry calculations ──────────────────────────────────────────────────
   const strandData = [];
   const angleStep = 360 / strandCount;
@@ -3104,16 +3275,131 @@ function _calculateMegatree() {
     const avgRadius = (baseRadius + topRadius) / 2;
     const strandLength = Math.sqrt(height * height + avgRadius * avgRadius);
 
+    let pixels;
+    if (pixelMode === 'calculated') {
+      const strandLengthInches = strandLength * 12;
+      pixels = Math.floor(strandLengthInches / pixelSpacing);
+    } else {
+      pixels = uniformPixels;
+    }
+
+    const amps = pixels * (wattsPerPixel * brightness / VOLTS);
+    const watts = pixels * wattsPerPixel * brightness;
+    const rwuAmps = amps * rwuFactor;
+    const rwuWatts = watts * rwuFactor;
+
+    // Voltage drop on strand
+    const strandRes = WIRE_RES[strandGauge];
+    const vdrop = amps * strandRes * 2 * strandLength;
+    const vAtStart = VOLTS - vdrop;
+    const minV = VOLT_DEFAULTS[VOLTS][pixelType].minV;
+    const voltageOk = vAtStart >= minV && amps <= WIRE_AMP[strandGauge];
+
     strandData.push({
       strandNum: i + 1,
       angle: angle,
       length: strandLength,
-      pixels: 50, // Placeholder - will add pixel inputs later
+      pixels: pixels,
+      amps: amps,
+      watts: watts,
+      rwuAmps: rwuAmps,
+      rwuWatts: rwuWatts,
+      vdrop: vdrop,
+      vAtStart: vAtStart,
+      voltageOk: voltageOk,
     });
   }
 
+  // ── Power calculations ─────────────────────────────────────────────────────
   const totalPixels = strandData.reduce((sum, s) => sum + s.pixels, 0);
+  const totalAmpsDC = strandData.reduce((sum, s) => sum + s.amps, 0);
+  const totalWattsDC = totalAmpsDC * VOLTS;
+  const totalRwuAmps = strandData.reduce((sum, s) => sum + s.rwuAmps, 0);
+  const totalRwuWatts = totalRwuAmps * VOLTS;
+
+  const usableWatts = ps.watts * psDerate;
+  const numPS = Math.ceil(totalWattsDC / usableWatts);
+  const wattsPerPS = totalWattsDC / numPS;
+  const ampsPerPS = totalAmpsDC / numPS;
+
+  const acDrawPerPS = wattsPerPS / ps.efficiency;
+  const totalAC_W = numPS * acDrawPerPS;
+  const totalAC_A = totalAC_W / 120;
+
   const avgStrandLength = strandData.reduce((sum, s) => sum + s.length, 0) / strandCount;
+  const strandsPerPSU = Math.ceil(strandCount / numPS);
+
+  // ── Render Per-Strand Table ───────────────────────────────────────────────
+  let strandTableRows = '';
+  strandData.forEach(s => {
+    const badge = s.voltageOk
+      ? '<span class="badge badge-ok">OK</span>'
+      : '<span class="badge badge-danger">VDROP</span>';
+    strandTableRows += `<tr>
+      <td>Strand ${s.strandNum}</td>
+      <td>${s.angle.toFixed(0)}°</td>
+      <td>${s.length.toFixed(1)} ft</td>
+      <td>${s.pixels}</td>
+      <td>${s.amps.toFixed(2)} A<br><span style="font-size:.72rem;color:var(--ok);">RWU ~${s.rwuAmps.toFixed(2)}A</span></td>
+      <td>${s.watts.toFixed(1)} W<br><span style="font-size:.72rem;color:var(--ok);">RWU ~${s.rwuWatts.toFixed(1)}W</span></td>
+      <td>${s.vAtStart.toFixed(2)} V ${badge}</td>
+    </tr>`;
+  });
+
+  // ── Render PSU Allocation Table ───────────────────────────────────────────
+  let psuTableRows = '';
+  for (let p = 0; p < numPS; p++) {
+    const strandStart = p * strandsPerPSU + 1;
+    const strandEnd = Math.min((p + 1) * strandsPerPSU, strandCount);
+    const strandsThisPSU = strandEnd - strandStart + 1;
+    const loadW = wattsPerPS;
+    const loadA = ampsPerPS;
+    const pct = ((loadW / usableWatts) * 100).toFixed(0);
+    const badgeClass = pct > 100 ? 'badge-danger' : pct > 90 ? 'badge-warn' : 'badge-ok';
+    psuTableRows += `<tr>
+      <td><strong>PSU ${p + 1}</strong></td>
+      <td>${ps.name.replace('MeanWell ', '')}</td>
+      <td>Strands ${strandStart}–${strandEnd} (${strandsThisPSU})</td>
+      <td>${loadW.toFixed(1)} W / ${loadA.toFixed(2)} A</td>
+      <td><span class="badge ${badgeClass}">${pct}% loaded</span></td>
+    </tr>`;
+  }
+
+  // ── Visual Representation (SVG) ────────────────────────────────────────────
+  const svgSize = 300;
+  const margin = 40;
+  const centerX = svgSize / 2;
+  const centerY = svgSize / 2;
+  const maxRadius = (svgSize - margin * 2) / 2;
+  const scale = maxRadius / baseRadius;
+
+  // Top-down view
+  let topViewStrands = '';
+  strandData.forEach(s => {
+    const rad = (s.angle - 90) * Math.PI / 180;  // -90 to start from top
+    const x1 = centerX;
+    const y1 = centerY;
+    const x2 = centerX + Math.cos(rad) * baseRadius * scale;
+    const y2 = centerY + Math.sin(rad) * baseRadius * scale;
+    const color = s.voltageOk ? '#22c55e' : '#ef4444';
+    topViewStrands += `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${color}" stroke-width="2" opacity="0.7"/>
+      <circle cx="${x2}" cy="${y2}" r="3" fill="${color}"/>`;
+  });
+
+  // Side view
+  const sideMargin = 20;
+  const sideWidth = 300;
+  const sideHeight = 250;
+  const heightScale = (sideHeight - sideMargin * 2) / height;
+  const baseX = sideWidth / 2;
+  const baseY = sideHeight - sideMargin;
+  const topY = sideMargin;
+  const baseRadiusScaled = baseRadius * heightScale;
+  const topRadiusScaled = topRadius * heightScale;
+
+  const sideViewPath = shape === 'cone'
+    ? `M ${baseX - baseRadiusScaled} ${baseY} L ${baseX} ${topY} L ${baseX + baseRadiusScaled} ${baseY} Z`
+    : `M ${baseX - baseRadiusScaled} ${baseY} L ${baseX - topRadiusScaled} ${topY} L ${baseX + topRadiusScaled} ${topY} L ${baseX + baseRadiusScaled} ${baseY} Z`;
 
   // ── Render Results ─────────────────────────────────────────────────────────
   document.getElementById('mtResults').innerHTML = `
@@ -3121,7 +3407,7 @@ function _calculateMegatree() {
       <div class="card">
         <div class="card-title">Tree Geometry</div>
         <div class="card-value">${height.toFixed(1)} ft</div>
-        <div class="card-unit">Height × ${baseDiam.toFixed(1)}ft base diameter</div>
+        <div class="card-unit">Height × ${baseDiam.toFixed(1)}ft base</div>
         <div class="card-detail">
           <strong>Shape:</strong> ${shape === 'cone' ? 'Cone (tapered)' : shape === 'cylinder' ? 'Cylinder' : 'Custom taper'}<br>
           <strong>Top diameter:</strong> ${topDiam.toFixed(1)} ft<br>
@@ -3133,16 +3419,62 @@ function _calculateMegatree() {
       <div class="card">
         <div class="card-title">Total Pixels</div>
         <div class="card-value">${totalPixels.toLocaleString()}</div>
-        <div class="card-unit">addressable pixels</div>
+        <div class="card-unit">${VOLTS}V addressable pixels</div>
         <div class="card-detail">
           <strong>Per strand avg:</strong> ${Math.round(totalPixels / strandCount)} pixels<br>
-          <em style="color:var(--muted);">More inputs and calculations coming soon...</em>
+          <strong>Brightness:</strong> ${Math.round(brightness * 100)}%<br>
+          <strong>Pixel type:</strong> ${pixelType === 'regulated' ? 'Regulated (CC)' : 'Resistor'}<br>
+          <strong>RWU factor:</strong> ${Math.round(rwuFactor * 100)}%
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">DC Power Required</div>
+        <div class="card-value">${totalWattsDC.toFixed(0)}</div>
+        <div class="card-unit">Watts at ${VOLTS}V DC</div>
+        <div class="card-detail">
+          <strong>Total Current:</strong> ${totalAmpsDC.toFixed(2)} A DC<br>
+          <strong>RWU estimate:</strong> ${totalRwuWatts.toFixed(0)}W / ${totalRwuAmps.toFixed(2)}A<br>
+          <strong>Per strand avg:</strong> ${(totalWattsDC / strandCount).toFixed(1)}W
+        </div>
+      </div>
+
+      <div class="card ${numPS > 10 ? 'warn' : 'ok'}">
+        <div class="card-title">Power Supplies</div>
+        <div class="card-value">${numPS}</div>
+        <div class="card-unit">${ps.name}</div>
+        <div class="card-detail">
+          <strong>Rated:</strong> ${ps.watts}W / ${ps.volts}V / ${ps.amps}A<br>
+          <strong>Usable (${Math.round(psDerate*100)}%):</strong> ${usableWatts.toFixed(0)}W<br>
+          <strong>Load per PS:</strong> ${wattsPerPS.toFixed(1)}W / ${ampsPerPS.toFixed(2)}A
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">AC Power Draw</div>
+        <div class="card-value">${totalAC_W.toFixed(0)}</div>
+        <div class="card-unit">Watts AC (theoretical)</div>
+        <div class="card-detail">
+          <strong>Total AC Current:</strong> ${totalAC_A.toFixed(2)} A @ 120V<br>
+          <strong>PS Efficiency:</strong> ${(ps.efficiency * 100).toFixed(1)}%<br>
+          <strong>15A circuits:</strong> ${Math.ceil(totalAC_A / 12)} (@ 80% NEC)
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Wire Gauge</div>
+        <div class="card-value">${strandGauge}</div>
+        <div class="card-unit">AWG for strand feeds</div>
+        <div class="card-detail">
+          <strong>Ampacity:</strong> ${WIRE_AMP[strandGauge]}A rated<br>
+          <strong>Total wire:</strong> ${(strandCount * avgStrandLength * 2).toFixed(0)} ft<br>
+          <strong>Spools needed:</strong> ${Math.ceil(strandCount * avgStrandLength * 2 / 100)}
         </div>
       </div>
     </div>
 
     <div class="result-section">
-      <div class="result-section-header">Per-Strand Analysis</div>
+      <div class="result-section-header">Per-Strand Power & Voltage Analysis</div>
       <div class="result-section-body" style="padding:0;">
         <table>
           <thead>
@@ -3151,17 +3483,83 @@ function _calculateMegatree() {
               <th>Angle</th>
               <th>Length</th>
               <th>Pixels</th>
+              <th>Current</th>
+              <th>Power</th>
+              <th>Voltage @ Start</th>
             </tr>
           </thead>
           <tbody>
-            ${strandData.map(s => `<tr>
-              <td>Strand ${s.strandNum}</td>
-              <td>${s.angle.toFixed(0)}°</td>
-              <td>${s.length.toFixed(1)} ft</td>
-              <td>${s.pixels}</td>
-            </tr>`).join('')}
+            ${strandTableRows}
           </tbody>
         </table>
+      </div>
+    </div>
+
+    <div class="result-section">
+      <div class="result-section-header">PSU Allocation to Strand Groups</div>
+      <div class="result-section-body" style="padding:0;">
+        <table>
+          <thead>
+            <tr>
+              <th>PSU</th>
+              <th>Model</th>
+              <th>Strands Powered</th>
+              <th>Load</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${psuTableRows}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="result-section">
+      <div class="result-section-header">Megatree Visual Representation</div>
+      <div class="result-section-body" style="padding:20px;">
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:30px; align-items:start;">
+
+          <!-- Top-Down View -->
+          <div style="text-align:center;">
+            <div style="font-weight:600; margin-bottom:10px; color:var(--text);">Top-Down View</div>
+            <svg width="${svgSize}" height="${svgSize}" style="background:var(--panel2); border-radius:8px;">
+              <!-- Base circle -->
+              <circle cx="${centerX}" cy="${centerY}" r="${baseRadius * scale}" fill="none" stroke="var(--border)" stroke-width="2" stroke-dasharray="5,5"/>
+              ${topRadius > 0 ? `<circle cx="${centerX}" cy="${centerY}" r="${topRadius * scale}" fill="none" stroke="var(--muted)" stroke-width="1" stroke-dasharray="3,3"/>` : ''}
+              <!-- Center pole -->
+              <circle cx="${centerX}" cy="${centerY}" r="6" fill="var(--accent)"/>
+              <!-- Strands -->
+              ${topViewStrands}
+              <!-- Labels -->
+              <text x="${centerX}" y="${svgSize - 10}" text-anchor="middle" fill="var(--muted)" font-size="11">${strandCount} strands @ ${angleStep.toFixed(1)}°</text>
+            </svg>
+            <div style="margin-top:8px; font-size:.75rem; color:var(--muted);">
+              <span style="color:#22c55e;">●</span> Voltage OK &nbsp;
+              <span style="color:#ef4444;">●</span> Voltage drop warning
+            </div>
+          </div>
+
+          <!-- Side View -->
+          <div style="text-align:center;">
+            <div style="font-weight:600; margin-bottom:10px; color:var(--text);">Side Profile</div>
+            <svg width="${sideWidth}" height="${sideHeight}" style="background:var(--panel2); border-radius:8px;">
+              <!-- Tree outline -->
+              <path d="${sideViewPath}" fill="rgba(79,142,247,.12)" stroke="var(--accent)" stroke-width="2"/>
+              <!-- Center pole -->
+              <line x1="${baseX}" y1="${baseY}" x2="${baseX}" y2="${topY}" stroke="var(--accent)" stroke-width="3"/>
+              <!-- Dimension lines -->
+              <line x1="${baseX - baseRadiusScaled - 15}" y1="${baseY}" x2="${baseX - baseRadiusScaled - 15}" y2="${topY}" stroke="var(--muted)" stroke-width="1"/>
+              <text x="${baseX - baseRadiusScaled - 20}" y="${(baseY + topY) / 2}" text-anchor="end" fill="var(--text)" font-size="12">${height.toFixed(1)} ft</text>
+              <line x1="${baseX - baseRadiusScaled}" y1="${baseY + 10}" x2="${baseX + baseRadiusScaled}" y2="${baseY + 10}" stroke="var(--muted)" stroke-width="1"/>
+              <text x="${baseX}" y="${baseY + 25}" text-anchor="middle" fill="var(--text)" font-size="12">${baseDiam.toFixed(1)} ft</text>
+            </svg>
+            <div style="margin-top:8px; font-size:.75rem; color:var(--muted);">
+              Shape: ${shape === 'cone' ? 'Cone (tapered)' : shape === 'cylinder' ? 'Cylinder' : 'Custom taper'}
+            </div>
+          </div>
+
+        </div>
       </div>
     </div>
   `;
@@ -3170,6 +3568,11 @@ function _calculateMegatree() {
 // ── Init controller mode on first load ────────────────────────────────────
 (function initControllerMode() {
   onCtrlBrandChange();   // populates model dropdown → triggers onCtrlModelChange → onCtrlVoltageChange
+})();
+
+// ── Init megatree mode on first load ──────────────────────────────────────
+(function initMegatreeMode() {
+  onMtVoltageChange();   // populates PS dropdown with 12V options by default
 })();
 
 // Close tooltip when clicking outside
