@@ -922,13 +922,42 @@
         <option value="24">24 strands (15° spacing)</option>
         <option value="32">32 strands (11.25° spacing)</option>
         <option value="48">48 strands (7.5° spacing)</option>
+        <option value="64">64 strands (5.625° spacing)</option>
+        <option value="96">96 strands (3.75° spacing)</option>
+        <option value="128">128 strands (2.8° spacing)</option>
+        <option value="192">192 strands (1.875° spacing)</option>
         <option value="custom">Custom (enter count)</option>
       </select>
     </div>
 
     <div class="field" id="mtCustomStrandField" style="display:none">
       <label>Custom Strand Count</label>
-      <input type="number" id="mtCustomStrands" value="20" min="3" max="100">
+      <input type="number" id="mtCustomStrands" value="20" min="3" max="256">
+    </div>
+
+    <div class="field" style="margin-bottom:8px;">
+      <label style="cursor:pointer; display:flex; align-items:center; gap:8px;">
+        <input type="checkbox" id="mtHighWind" onchange="toggleMtHighWind()"
+          style="width:15px;height:15px;accent-color:var(--accent);cursor:pointer;">
+        <span style="color:var(--text); font-weight:600;">High Wind Mode</span>
+      </label>
+      <div style="font-size:.73rem; color:var(--muted); margin-top:3px; margin-left:23px;">
+        Enhanced structural recommendations for windy locations
+      </div>
+    </div>
+
+    <div id="mtHighWindFields" style="display:none; padding:10px 12px;
+      background:rgba(245,158,11,.06); border:1px solid rgba(245,158,11,.2);
+      border-radius:7px; margin-bottom:12px;">
+      <div class="field">
+        <label>Expected Wind Speed</label>
+        <select id="mtWindSpeed">
+          <option value="20">20 mph — light winds</option>
+          <option value="30" selected>30 mph — moderate winds</option>
+          <option value="40">40 mph — strong winds</option>
+          <option value="50">50+ mph — high wind zone</option>
+        </select>
+      </div>
     </div>
 
     <!-- Pixel Configuration Section -->
@@ -974,18 +1003,30 @@
       <label>Pixels per Strand</label>
       <select id="mtPixelMode" onchange="toggleMtPixelMode()">
         <option value="uniform" selected>Uniform (same for all strands)</option>
-        <option value="calculated">Auto-Calculate from Spacing</option>
+        <option value="calculated">Auto-Calculate from Seed Pixel Spacing</option>
       </select>
     </div>
 
     <div class="field" id="mtUniformPixelField">
       <label>Pixels per Strand (uniform)</label>
-      <input type="number" id="mtPixelsPerStrand" value="50" min="1" max="500">
+      <input type="number" id="mtPixelsPerStrand" value="50" min="1" max="1000">
     </div>
 
     <div class="field" id="mtSpacingField" style="display:none">
-      <label>Pixel Spacing (inches)</label>
-      <input type="number" id="mtPixelSpacing" value="4" min="0.5" max="24" step="0.5">
+      <label>Seed Pixel Spacing</label>
+      <select id="mtPixelSpacingMode" onchange="toggleMtCustomSpacing()">
+        <option value="2">2 cm — ultra dense</option>
+        <option value="2.5">2.5 cm — very dense</option>
+        <option value="4" selected>4 cm — dense (common)</option>
+        <option value="5">5 cm — medium density</option>
+        <option value="10">10 cm — sparse</option>
+        <option value="custom">Custom spacing</option>
+      </select>
+    </div>
+
+    <div class="field" id="mtCustomSpacingField" style="display:none">
+      <label>Custom Spacing (centimeters)</label>
+      <input type="number" id="mtCustomPixelSpacing" value="4" min="0.5" max="50" step="0.1">
     </div>
 
     <div class="field">
@@ -1131,6 +1172,17 @@ function toggleMtPixelMode() {
   const mode = document.getElementById('mtPixelMode').value;
   document.getElementById('mtUniformPixelField').style.display = mode === 'uniform' ? 'block' : 'none';
   document.getElementById('mtSpacingField').style.display = mode === 'calculated' ? 'block' : 'none';
+  if (mode === 'calculated') {
+    toggleMtCustomSpacing();  // Initialize custom spacing field visibility
+  }
+}
+function toggleMtCustomSpacing() {
+  const spacingMode = document.getElementById('mtPixelSpacingMode').value;
+  document.getElementById('mtCustomSpacingField').style.display = spacingMode === 'custom' ? 'block' : 'none';
+}
+function toggleMtHighWind() {
+  const enabled = document.getElementById('mtHighWind').checked;
+  document.getElementById('mtHighWindFields').style.display = enabled ? 'block' : 'none';
 }
 function getMtVolts() {
   return parseInt(document.querySelector('input[name="mtVoltage"]:checked').value);
@@ -3251,9 +3303,21 @@ function _calculateMegatree() {
   const uniformPixels = pixelMode === 'uniform'
     ? parseInt(document.getElementById('mtPixelsPerStrand').value)
     : 0;
-  const pixelSpacing = pixelMode === 'calculated'
-    ? parseFloat(document.getElementById('mtPixelSpacing').value)
-    : 0;
+
+  // Get spacing in cm, convert to inches (1 cm = 0.3937 inches)
+  let pixelSpacingCm = 0;
+  if (pixelMode === 'calculated') {
+    const spacingMode = document.getElementById('mtPixelSpacingMode').value;
+    if (spacingMode === 'custom') {
+      pixelSpacingCm = parseFloat(document.getElementById('mtCustomPixelSpacing').value);
+    } else {
+      pixelSpacingCm = parseFloat(spacingMode);
+    }
+  }
+  const pixelSpacingInches = pixelSpacingCm * 0.3937;
+
+  const highWindMode = document.getElementById('mtHighWind').checked;
+  const windSpeed = highWindMode ? parseInt(document.getElementById('mtWindSpeed').value) : 0;
 
   const VOLTS = getMtVolts();
   const pixelType = getMtPixelType();
@@ -3278,7 +3342,7 @@ function _calculateMegatree() {
     let pixels;
     if (pixelMode === 'calculated') {
       const strandLengthInches = strandLength * 12;
-      pixels = Math.floor(strandLengthInches / pixelSpacing);
+      pixels = Math.floor(strandLengthInches / pixelSpacingInches);
     } else {
       pixels = uniformPixels;
     }
@@ -3373,17 +3437,22 @@ function _calculateMegatree() {
   const maxRadius = (svgSize - margin * 2) / 2;
   const scale = maxRadius / baseRadius;
 
-  // Top-down view
+  // Top-down view (optimize for high strand counts)
+  const renderEveryNth = strandCount > 128 ? 3 : strandCount > 64 ? 2 : 1;
+  const strokeWidth = strandCount > 96 ? 1 : strandCount > 48 ? 1.5 : 2;
+  const circleRadius = strandCount > 96 ? 2 : 3;
   let topViewStrands = '';
-  strandData.forEach(s => {
+  strandData.forEach((s, idx) => {
+    // For high strand counts, only render every Nth strand for visual clarity
+    if (idx % renderEveryNth !== 0) return;
     const rad = (s.angle - 90) * Math.PI / 180;  // -90 to start from top
     const x1 = centerX;
     const y1 = centerY;
     const x2 = centerX + Math.cos(rad) * baseRadius * scale;
     const y2 = centerY + Math.sin(rad) * baseRadius * scale;
     const color = s.voltageOk ? '#22c55e' : '#ef4444';
-    topViewStrands += `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${color}" stroke-width="2" opacity="0.7"/>
-      <circle cx="${x2}" cy="${y2}" r="3" fill="${color}"/>`;
+    topViewStrands += `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${color}" stroke-width="${strokeWidth}" opacity="0.7"/>
+      <circle cx="${x2}" cy="${y2}" r="${circleRadius}" fill="${color}"/>`;
   });
 
   // Side view
@@ -3422,6 +3491,7 @@ function _calculateMegatree() {
         <div class="card-unit">${VOLTS}V addressable pixels</div>
         <div class="card-detail">
           <strong>Per strand avg:</strong> ${Math.round(totalPixels / strandCount)} pixels<br>
+          ${pixelMode === 'calculated' ? `<strong>Seed spacing:</strong> ${pixelSpacingCm.toFixed(1)} cm<br>` : ''}
           <strong>Brightness:</strong> ${Math.round(brightness * 100)}%<br>
           <strong>Pixel type:</strong> ${pixelType === 'regulated' ? 'Regulated (CC)' : 'Resistor'}<br>
           <strong>RWU factor:</strong> ${Math.round(rwuFactor * 100)}%
@@ -3515,6 +3585,29 @@ function _calculateMegatree() {
       </div>
     </div>
 
+    ${highWindMode ? `<div class="result-section">
+      <div class="result-section-header">&#9888; Structural Recommendations (High Wind Mode: ${windSpeed} mph)</div>
+      <div class="result-section-body" style="padding:20px;">
+        <div style="background:rgba(245,158,11,.08); border:1px solid rgba(245,158,11,.3); border-radius:8px; padding:15px; margin-bottom:15px;">
+          <div style="font-weight:700; color:var(--warn); margin-bottom:10px; font-size:.95rem;">⚠ High Wind Zone Recommendations</div>
+          <div style="color:var(--text); line-height:1.7; font-size:.85rem;">
+            <strong>Guy Wire Configuration:</strong> ${windSpeed >= 40 ? '6-point or 8-point anchoring system (stronger than 4-point)' : '4-point anchoring system (recommended minimum)'}<br>
+            <strong>Guy Wire Diameter:</strong> ${windSpeed >= 40 ? '3/16" galvanized steel cable (heavy duty)' : '1/8" to 3/16" galvanized steel cable'}<br>
+            <strong>Guy Wire Quantity:</strong> ${windSpeed >= 40 ? 'Multiple tiers (attach at 1/3, 2/3, and top of pole)' : 'Single tier from top acceptable for heights <25ft'}<br>
+            <strong>Ground Anchors:</strong> ${windSpeed >= 40 ? 'Concrete deadman anchors or 48" auger anchors' : '36" auger anchors (minimum)'}<br>
+            <strong>Strand Tensioners:</strong> <span style="color:var(--ok);">${strandCount} × spring hooks recommended</span> (affordable for ${strandCount} strands, ~$0.50-1.00 each)<br>
+            ${strandCount > 96 ? `<strong>Alternative:</strong> Small turnbuckles for bottom 25% of strands (high-load strands), spring hooks for remaining ${Math.floor(strandCount * 0.75)} strands (cost effective)<br>` : ''}
+            <strong>Pole Material:</strong> ${windSpeed >= 40 ? 'Steel conduit or aluminum pole (NOT PVC for high wind)' : 'EMT conduit 1" or larger, OR steel pole'}<br>
+            <strong>Base Type:</strong> ${height > 25 || windSpeed >= 40 ? 'Concrete footing required (24" diameter × 48" deep minimum)' : 'In-ground stake with concrete collar acceptable'}<br>
+          </div>
+        </div>
+        <div style="font-size:.8rem; color:var(--muted); font-style:italic;">
+          These recommendations are based on ${height.toFixed(0)}ft height, ${baseDiam.toFixed(0)}ft base diameter, ${strandCount} strands, and ${windSpeed} mph wind speed.
+          Consult local building codes and consider professional engineering for trees >30ft or wind >40mph.
+        </div>
+      </div>
+    </div>` : ''}
+
     <div class="result-section">
       <div class="result-section-header">Megatree Visual Representation</div>
       <div class="result-section-body" style="padding:20px;">
@@ -3537,6 +3630,7 @@ function _calculateMegatree() {
             <div style="margin-top:8px; font-size:.75rem; color:var(--muted);">
               <span style="color:#22c55e;">●</span> Voltage OK &nbsp;
               <span style="color:#ef4444;">●</span> Voltage drop warning
+              ${renderEveryNth > 1 ? `<br><em>(Showing every ${renderEveryNth === 2 ? '2nd' : '3rd'} strand for clarity)</em>` : ''}
             </div>
           </div>
 
