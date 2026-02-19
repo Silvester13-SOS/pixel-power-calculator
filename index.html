@@ -2354,10 +2354,7 @@ function _calculateController() {
 
   const totalDCWatts   = bankData.reduce((s,b) => s+b.totalWatts, 0);
   const rwuTotalDCWatts = bankData.reduce((s,b) => s+b.rwuTotalWatts, 0);
-  const totalACWatts   = psGroupData.reduce((s,g) => s+g.acDraw, 0);
-  const totalACAmps    = totalACWatts / acV;
   const totalPx        = bankData.reduce((s,b) => s+b.totalPx, 0);
-  const maxPigtailDrop = pigtailOn ? Math.max(...psGroupData.map(g => g.vdropPigtail), 0) : 0;
   const maxCtoEDrop    = ctoEOn   ? Math.max(...bankData.map(b => b.maxCtoEDrop), 0) : 0;
   const maxExtDrop     = bankData.length ? Math.max(...bankData.map(b => b.maxExtDrop), 0) : 0;
   const maxPortAmps    = bankData.length ? Math.max(...bankData.map(b => b.maxPortAmps), 0) : 0;
@@ -2405,7 +2402,6 @@ function _calculateController() {
   }
   if (curBanks.length) psGroups.push({banks:[...curBanks], psuLoadWatts:curWatts, overloaded:false});
 
-  const numPS = psGroups.length;
   const psGroupData = psGroups.map((g, i) => {
     // Calculate both PSU load (for bin-packing) and actual total watts (for display)
     const totalWatts = g.banks.reduce((s, bi) => s + bankData[bi].totalWatts, 0);
@@ -2422,6 +2418,13 @@ function _calculateController() {
       loadPct: g.psuLoadWatts / usableWatts * 100,
     };
   });
+
+  const numPS = psGroups.length;
+
+  // PSU-dependent totals (calculated after psGroupData is created)
+  const totalACWatts   = psGroupData.reduce((s,g) => s+g.acDraw, 0);
+  const totalACAmps    = totalACWatts / acV;
+  const maxPigtailDrop = pigtailOn ? Math.max(...psGroupData.map(g => g.vdropPigtail), 0) : 0;
 
   // Build bank → PSU lookup (used for display in PSU allocation table)
   const bankToPsu = {};
@@ -2552,17 +2555,27 @@ function _calculateController() {
          ${extLen > 0 ? `<span style="font-size:.71rem;color:${b.anyExtOver?'var(--danger)':'var(--muted)'};">Ext: &minus;${b.maxExtDrop.toFixed(3)}V ${b.anyExtOver?' &#9888; over '+extAmpacity+'A':''}</span>` : ''}`
       : '<span style="color:var(--muted);font-size:.8rem;">—</span>'}</td>
     <td><span class="badge ${badgeClass}">
-      ${b.portOver
-        ? '&#9888; '+b.maxPortAmps.toFixed(2)+'A/port EXCEEDS '+spec.ampsPerPort+'A limit'
-          +(b.rwuPortOver
-            ? ' &mdash; RWU also over (~'+b.rwuMaxPortAmps.toFixed(2)+'A)'
-            : ' &mdash; RWU OK (~'+b.rwuMaxPortAmps.toFixed(2)+'A)')
-        : b.bankOver
-          ? '&#9888; '+b.totalAmps.toFixed(1)+'A EXCEEDS '+spec.maxAmpsPerBank+'A bank limit'
+      ${(() => {
+        const warnings = [];
+        // Check port limit
+        if (b.portOver) {
+          warnings.push('&#9888; '+b.maxPortAmps.toFixed(2)+'A/port EXCEEDS '+spec.ampsPerPort+'A limit'
+            +(b.rwuPortOver
+              ? ' &mdash; RWU also over (~'+b.rwuMaxPortAmps.toFixed(2)+'A)'
+              : ' &mdash; RWU OK (~'+b.rwuMaxPortAmps.toFixed(2)+'A)'));
+        }
+        // Check bank limit
+        if (b.bankOver) {
+          warnings.push('&#9888; '+b.totalAmps.toFixed(2)+'A EXCEEDS '+spec.maxAmpsPerBank+'A bank limit'
             +(b.rwuBankOver
-              ? ' &mdash; RWU also over (~'+b.rwuTotalAmps.toFixed(1)+'A)'
-              : ' &mdash; RWU OK (~'+b.rwuTotalAmps.toFixed(1)+'A)')
-          : 'OK &mdash; within '+spec.maxAmpsPerBank+'A bank / '+(spec.ampsPerPort?spec.ampsPerPort+'A port':'—')}
+              ? ' &mdash; RWU also over (~'+b.rwuTotalAmps.toFixed(2)+'A)'
+              : ' &mdash; RWU OK (~'+b.rwuTotalAmps.toFixed(2)+'A)'));
+        }
+        // Return combined warnings or OK message
+        return warnings.length > 0
+          ? warnings.join('<br>')
+          : 'OK &mdash; within '+spec.maxAmpsPerBank+'A bank / '+(spec.ampsPerPort?spec.ampsPerPort+'A port':'—');
+      })()}
     </span></td>
   </tr>${portDetail}`;
   }).join('');
@@ -2572,6 +2585,11 @@ function _calculateController() {
   const psRows = psGroupData.map(g => {
     const psuLoadDiff = g.totalWatts !== g.psuLoadWatts;
     const rwuPsuWatts = g.banks.reduce((s, bi) => s + bankData[bi].rwuPsuLoadWatts, 0);
+    const rwuOverloaded = rwuPsuWatts > usableWatts;
+    // Three-state: hard = both over, soft = theoretical only
+    const hardOver = g.overloaded && rwuOverloaded;
+    const softOver = g.overloaded && !rwuOverloaded;
+    const statusBadge = hardOver ? 'badge-danger' : softOver ? 'badge-warn' : 'badge-ok';
     return `<tr>
     <td><strong>PSU ${g.psNum}</strong></td>
     <td>Bank${g.banks.length>1?'s':''}&nbsp;${g.banks.map(b=>b+1).join(', ')}</td>
@@ -2588,9 +2606,14 @@ function _calculateController() {
         ${g.psAmps.toFixed(2)}A on ${pigtailGauge} AWG${g.pigtailOk?'':' &#9888; over '+pigtailAmpacity+'A'}
       </span></td>` : ''}
     <td>${g.acDraw.toFixed(1)}W / ${g.acAmps.toFixed(2)}A @ ${acV}V</td>
-    <td>${g.overloaded
-      ? '<span class="badge badge-danger">&#9888; Exceeds PS capacity &mdash; upgrade PS or split bank</span>'
-      : '<span class="badge badge-ok">OK</span>'}</td>
+    <td><span class="badge ${statusBadge}">${
+      g.overloaded
+        ? '&#9888; '+g.psuLoadWatts.toFixed(1)+'W exceeds PS capacity'
+          +(rwuOverloaded
+            ? ' &mdash; RWU also over (~'+rwuPsuWatts.toFixed(1)+'W) &mdash; upgrade PS or split bank'
+            : ' &mdash; RWU OK (~'+rwuPsuWatts.toFixed(1)+'W)')
+        : 'OK'
+    }</span></td>
   </tr>`;
   }).join('');
 
