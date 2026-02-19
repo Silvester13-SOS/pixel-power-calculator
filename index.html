@@ -46,6 +46,26 @@
   }
   header h1 { font-size: 1.35rem; font-weight: 700; letter-spacing: -0.3px; }
   header p { font-size: 0.8rem; color: var(--muted); margin-top: 2px; }
+  header .spacer { flex: 1; }
+  header .help-link {
+    padding: 8px 16px;
+    background: rgba(79,142,247,.12);
+    border: 1px solid rgba(79,142,247,.3);
+    border-radius: 7px;
+    color: var(--accent);
+    text-decoration: none;
+    font-size: 0.85rem;
+    font-weight: 600;
+    transition: all .15s;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  header .help-link:hover {
+    background: rgba(79,142,247,.22);
+    border-color: var(--accent);
+    color: var(--text);
+  }
   .main { display: grid; grid-template-columns: 340px 1fr; gap: 0; min-height: calc(100vh - 70px); }
   .sidebar {
     background: var(--panel);
@@ -299,6 +319,10 @@
     <h1>WS2811 / WS2812B Pixel Power Calculator</h1>
     <p>MeanWell power supplies &bull; NEC wire sizing &bull; AC circuit planning</p>
   </div>
+  <div class="spacer"></div>
+  <a href="https://github.com/Silvester13-SOS/pixel-power-calculator/blob/main/README.md" target="_blank" class="help-link">
+    <span>&#10068;</span> Help
+  </a>
 </header>
 
 <!-- ── Mode selector ────────────────────────────────────────────────────── -->
