@@ -329,6 +329,7 @@
 <div class="mode-bar">
   <button class="mode-tab active" id="modeTab1" onclick="setMode(1)">&#9889; String Power Needs</button>
   <button class="mode-tab"        id="modeTab2" onclick="setMode(2)">&#127917; Controller Setup Power Needs</button>
+  <button class="mode-tab"        id="modeTab3" onclick="setMode(3)">&#127794; Megatree Planner</button>
 </div>
 
 <div class="main" id="mode1Main">
@@ -883,6 +884,67 @@
 
 </div><!-- /mode2Main -->
 
+<div class="main" id="mode3Main" style="display:none">
+  <!-- SIDEBAR INPUTS -->
+  <div class="sidebar">
+
+    <div class="section-label">Megatree Geometry</div>
+
+    <div class="field">
+      <label>Tree Height (feet)</label>
+      <input type="number" id="mtHeight" value="20" min="1" max="100" step="0.5">
+    </div>
+
+    <div class="field">
+      <label>Base Diameter (feet)</label>
+      <input type="number" id="mtBaseDiam" value="12" min="1" max="50" step="0.5">
+    </div>
+
+    <div class="field">
+      <label>Tree Shape</label>
+      <select id="mtShape" onchange="toggleMtCustomTaper()">
+        <option value="cone" selected>Cone (tapered from base to point)</option>
+        <option value="cylinder">Cylinder (straight sides, no taper)</option>
+        <option value="custom">Custom Taper (specify top diameter)</option>
+      </select>
+    </div>
+
+    <div class="field" id="mtCustomTaperField" style="display:none">
+      <label>Top Diameter (feet)</label>
+      <input type="number" id="mtTopDiam" value="2" min="0" max="50" step="0.5">
+    </div>
+
+    <div class="field">
+      <label>Number of Strands</label>
+      <select id="mtStrandCount" onchange="toggleMtCustomStrands()">
+        <option value="12">12 strands (30° spacing)</option>
+        <option value="16" selected>16 strands (22.5° spacing)</option>
+        <option value="24">24 strands (15° spacing)</option>
+        <option value="32">32 strands (11.25° spacing)</option>
+        <option value="48">48 strands (7.5° spacing)</option>
+        <option value="custom">Custom (enter count)</option>
+      </select>
+    </div>
+
+    <div class="field" id="mtCustomStrandField" style="display:none">
+      <label>Custom Strand Count</label>
+      <input type="number" id="mtCustomStrands" value="20" min="3" max="100">
+    </div>
+
+    <button class="calc-btn" onclick="calculateMegatree()">&#127794; Calculate Megatree</button>
+
+  </div><!-- /sidebar -->
+
+  <!-- MAIN CONTENT -->
+  <div class="content" id="mtResults">
+    <div class="empty">
+      <div class="icon">&#127794;</div>
+      <p>Configure your megatree geometry and settings, then click <strong>Calculate</strong> to see power requirements and optional parts list.</p>
+    </div>
+  </div>
+
+</div><!-- /mode3Main -->
+
 <script>
 // ── Constants ──────────────────────────────────────────────────────────────
 const PS_MODELS = {
@@ -945,6 +1007,17 @@ function toggleCtrlCustomSpacing() {
   const v = document.getElementById('ctrlDensity').value;
   document.getElementById('ctrlCustomSpacingField').style.display = v === 'custom' ? 'block' : 'none';
 }
+
+// ── Megatree Toggle Functions ──────────────────────────────────────────────
+function toggleMtCustomTaper() {
+  const shape = document.getElementById('mtShape').value;
+  document.getElementById('mtCustomTaperField').style.display = shape === 'custom' ? 'block' : 'none';
+}
+function toggleMtCustomStrands() {
+  const count = document.getElementById('mtStrandCount').value;
+  document.getElementById('mtCustomStrandField').style.display = count === 'custom' ? 'block' : 'none';
+}
+
 function updateCtrlMinV() {
   const volts = getCtrlVolts();
   const type  = getCtrlPixType();
@@ -1947,8 +2020,10 @@ function positionTip(btn) {
 function setMode(n) {
   document.getElementById('mode1Main').style.display = n === 1 ? 'grid' : 'none';
   document.getElementById('mode2Main').style.display = n === 2 ? 'grid' : 'none';
+  document.getElementById('mode3Main').style.display = n === 3 ? 'grid' : 'none';
   document.getElementById('modeTab1').classList.toggle('active', n === 1);
   document.getElementById('modeTab2').classList.toggle('active', n === 2);
+  document.getElementById('modeTab3').classList.toggle('active', n === 3);
 }
 
 // ── Controller Database ────────────────────────────────────────────────────
@@ -2988,6 +3063,106 @@ function _calculateController() {
       Controller mode calculates power sizing only &mdash; use <strong style="color:var(--text)">String Power Needs</strong> mode
       to plan voltage drop and injection spacing for individual port runs.
       All PSU recommendations assume the selected model at the selected derate factor.
+    </div>
+  `;
+}
+
+// ── MEGATREE PLANNER ───────────────────────────────────────────────────────
+function calculateMegatree() {
+  try {
+    _calculateMegatree();
+  } catch(e) {
+    document.getElementById('mtResults').innerHTML =
+      `<div style="padding:20px; background:rgba(239,68,68,.12); border:1px solid var(--danger);
+        border-radius:10px; color:var(--danger); font-family:monospace; font-size:.85rem; white-space:pre-wrap;">
+&#9888; JavaScript error in calculateMegatree():\n${e.message}\n\n${e.stack}</div>`;
+  }
+}
+
+function _calculateMegatree() {
+  // ── Read inputs ────────────────────────────────────────────────────────────
+  const height = parseFloat(document.getElementById('mtHeight').value);
+  const baseDiam = parseFloat(document.getElementById('mtBaseDiam').value);
+  const baseRadius = baseDiam / 2;
+  const shape = document.getElementById('mtShape').value;
+  const topDiam = shape === 'custom'
+    ? parseFloat(document.getElementById('mtTopDiam').value)
+    : (shape === 'cone' ? 0 : baseDiam);
+  const topRadius = topDiam / 2;
+
+  const strandCountVal = document.getElementById('mtStrandCount').value;
+  const strandCount = strandCountVal === 'custom'
+    ? parseInt(document.getElementById('mtCustomStrands').value)
+    : parseInt(strandCountVal);
+
+  // ── Geometry calculations ──────────────────────────────────────────────────
+  const strandData = [];
+  const angleStep = 360 / strandCount;
+
+  for (let i = 0; i < strandCount; i++) {
+    const angle = i * angleStep;
+    const avgRadius = (baseRadius + topRadius) / 2;
+    const strandLength = Math.sqrt(height * height + avgRadius * avgRadius);
+
+    strandData.push({
+      strandNum: i + 1,
+      angle: angle,
+      length: strandLength,
+      pixels: 50, // Placeholder - will add pixel inputs later
+    });
+  }
+
+  const totalPixels = strandData.reduce((sum, s) => sum + s.pixels, 0);
+  const avgStrandLength = strandData.reduce((sum, s) => sum + s.length, 0) / strandCount;
+
+  // ── Render Results ─────────────────────────────────────────────────────────
+  document.getElementById('mtResults').innerHTML = `
+    <div class="results-grid">
+      <div class="card">
+        <div class="card-title">Tree Geometry</div>
+        <div class="card-value">${height.toFixed(1)} ft</div>
+        <div class="card-unit">Height × ${baseDiam.toFixed(1)}ft base diameter</div>
+        <div class="card-detail">
+          <strong>Shape:</strong> ${shape === 'cone' ? 'Cone (tapered)' : shape === 'cylinder' ? 'Cylinder' : 'Custom taper'}<br>
+          <strong>Top diameter:</strong> ${topDiam.toFixed(1)} ft<br>
+          <strong>Strands:</strong> ${strandCount} (${angleStep.toFixed(1)}° spacing)<br>
+          <strong>Avg strand length:</strong> ${avgStrandLength.toFixed(1)} ft
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Total Pixels</div>
+        <div class="card-value">${totalPixels.toLocaleString()}</div>
+        <div class="card-unit">addressable pixels</div>
+        <div class="card-detail">
+          <strong>Per strand avg:</strong> ${Math.round(totalPixels / strandCount)} pixels<br>
+          <em style="color:var(--muted);">More inputs and calculations coming soon...</em>
+        </div>
+      </div>
+    </div>
+
+    <div class="result-section">
+      <div class="result-section-header">Per-Strand Analysis</div>
+      <div class="result-section-body" style="padding:0;">
+        <table>
+          <thead>
+            <tr>
+              <th>Strand</th>
+              <th>Angle</th>
+              <th>Length</th>
+              <th>Pixels</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${strandData.map(s => `<tr>
+              <td>Strand ${s.strandNum}</td>
+              <td>${s.angle.toFixed(0)}°</td>
+              <td>${s.length.toFixed(1)} ft</td>
+              <td>${s.pixels}</td>
+            </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>
     </div>
   `;
 }
