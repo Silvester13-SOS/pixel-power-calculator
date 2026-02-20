@@ -3429,6 +3429,8 @@ function _calculateMegatree() {
   const totalStringLengthM = pixelMode === 'calculated'
     ? strandData.reduce((sum, s) => sum + s.stringLengthM, 0)
     : 0;
+  const avgStringLengthM = pixelMode === 'calculated' ? totalStringLengthM / strandCount : 0;
+  const avgStringLengthFt = avgStringLengthM * 3.28084;
   const pixelsPerRoll = 1000;  // Standard seed pixel roll
   const rollLengthM = pixelsPerRoll * pixelSpacingCm / 100;  // Length of one roll in meters
   const rollsNeeded = pixelMode === 'calculated'
@@ -3880,7 +3882,7 @@ function _calculateMegatree() {
             <div style="margin-bottom:20px;">
               <div style="font-weight:700; color:var(--text); margin-bottom:8px;">Step 9: Pixel String Assembly & Installation</div>
               <ol style="margin:0; padding-left:20px;">
-                ${pixelMode === 'calculated' ? `<li>Cut ${strandCount} pixel strings from rolls: ${stringLengthM.toFixed(2)}m (${stringLengthFt.toFixed(1)}ft) each</li>` : `<li>Prepare ${strandCount} pixel strings with ${uniformPixels} pixels each</li>`}
+                ${pixelMode === 'calculated' ? `<li>Cut ${strandCount} pixel strings from rolls: ${avgStringLengthM.toFixed(2)}m (${avgStringLengthFt.toFixed(1)}ft) each</li>` : `<li>Prepare ${strandCount} pixel strings with ${uniformPixels} pixels each</li>`}
                 <li>Add slack allowance for top/bottom connections (${slackAllowanceInches}" recommended)</li>
                 <li>Attach pixel strings to strand support wires using UV-resistant zip ties (every 10-20 pixels)</li>
                 <li>Run strand feed wires (${strandGauge} AWG) from controller to start of each pixel string</li>
