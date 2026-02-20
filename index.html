@@ -3455,20 +3455,43 @@ function _calculateMegatree() {
 
   // ── Render PSU Allocation Table ───────────────────────────────────────────
   let psuTableRows = '';
+  const baseStrandsPerPSU = Math.floor(strandCount / numPS);
+  const remainderStrands = strandCount % numPS;
+
+  let currentStrandIndex = 0;
   for (let p = 0; p < numPS; p++) {
-    const strandStart = p * strandsPerPSU + 1;
-    const strandEnd = Math.min((p + 1) * strandsPerPSU, strandCount);
-    const strandsThisPSU = strandEnd - strandStart + 1;
-    const loadW = wattsPerPS;
-    const loadA = ampsPerPS;
-    const pct = ((loadW / usableWatts) * 100).toFixed(0);
+    // Distribute remainder strands to first PSUs (each gets one extra)
+    const strandsThisPSU = baseStrandsPerPSU + (p < remainderStrands ? 1 : 0);
+    const strandStart = currentStrandIndex + 1;
+    const strandEnd = currentStrandIndex + strandsThisPSU;
+    currentStrandIndex = strandEnd;
+
+    // Calculate actual load from the strands this PSU powers
+    let psuWatts = 0;
+    let psuAmps = 0;
+    let psuRwuWatts = 0;
+    let psuRwuAmps = 0;
+    for (let i = strandStart - 1; i < strandEnd; i++) {
+      psuWatts += strandData[i].watts;
+      psuAmps += strandData[i].amps;
+      psuRwuWatts += strandData[i].rwuWatts;
+      psuRwuAmps += strandData[i].rwuAmps;
+    }
+
+    const pct = ((psuWatts / usableWatts) * 100).toFixed(0);
+    const rwuPct = ((psuRwuWatts / usableWatts) * 100).toFixed(0);
     const badgeClass = pct > 100 ? 'badge-danger' : pct > 90 ? 'badge-warn' : 'badge-ok';
+
+    const strandRange = strandsThisPSU === 1
+      ? `Strand ${strandStart}`
+      : `Strands ${strandStart}–${strandEnd} (${strandsThisPSU})`;
+
     psuTableRows += `<tr>
       <td><strong>PSU ${p + 1}</strong></td>
       <td>${ps.name.replace('MeanWell ', '')}</td>
-      <td>Strands ${strandStart}–${strandEnd} (${strandsThisPSU})</td>
-      <td>${loadW.toFixed(1)} W / ${loadA.toFixed(2)} A</td>
-      <td><span class="badge ${badgeClass}">${pct}% loaded</span></td>
+      <td>${strandRange}</td>
+      <td>${psuWatts.toFixed(1)} W / ${psuAmps.toFixed(2)} A<br><span style="font-size:.72rem;color:var(--ok);">RWU ~${psuRwuWatts.toFixed(1)}W / ${psuRwuAmps.toFixed(2)}A</span></td>
+      <td><span class="badge ${badgeClass}">${pct}% loaded<br><span style="font-size:.72rem;">RWU ~${rwuPct}%</span></span></td>
     </tr>`;
   }
 
