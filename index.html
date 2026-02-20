@@ -1029,6 +1029,19 @@
       <input type="number" id="mtCustomPixelSpacing" value="4" min="0.5" max="50" step="0.1">
     </div>
 
+    <div class="field" id="mtSlackField" style="display:none">
+      <label>Strand Slack/Connector Allowance (total per strand)</label>
+      <select id="mtSlackAllowance">
+        <option value="6">6 inches — minimal slack</option>
+        <option value="12" selected>12 inches (1 ft) — recommended</option>
+        <option value="18">18 inches — extra slack</option>
+        <option value="24">24 inches (2 ft) — generous</option>
+      </select>
+      <div style="font-size:.73rem; color:var(--muted); margin-top:3px;">
+        Extra length for top/bottom connectors and tension adjustment
+      </div>
+    </div>
+
     <div class="field">
       <label>Watts per Pixel at 100% White</label>
       <input type="number" id="mtWattsPerPixel" value="0.60" min="0.01" max="5" step="0.01">
@@ -1172,6 +1185,7 @@ function toggleMtPixelMode() {
   const mode = document.getElementById('mtPixelMode').value;
   document.getElementById('mtUniformPixelField').style.display = mode === 'uniform' ? 'block' : 'none';
   document.getElementById('mtSpacingField').style.display = mode === 'calculated' ? 'block' : 'none';
+  document.getElementById('mtSlackField').style.display = mode === 'calculated' ? 'block' : 'none';
   if (mode === 'calculated') {
     toggleMtCustomSpacing();  // Initialize custom spacing field visibility
   }
@@ -3316,6 +3330,11 @@ function _calculateMegatree() {
   }
   const pixelSpacingInches = pixelSpacingCm * 0.3937;
 
+  // Get slack allowance for seed pixel strings
+  const slackAllowanceInches = pixelMode === 'calculated'
+    ? parseFloat(document.getElementById('mtSlackAllowance').value)
+    : 0;
+
   const highWindMode = document.getElementById('mtHighWind').checked;
   const windSpeed = highWindMode ? parseInt(document.getElementById('mtWindSpeed').value) : 0;
 
@@ -3347,6 +3366,14 @@ function _calculateMegatree() {
       pixels = uniformPixels;
     }
 
+    // Calculate physical string length to cut from roll (for seed pixels)
+    // String length = (pixels × spacing) + slack allowance
+    const stringLengthCm = pixelMode === 'calculated'
+      ? (pixels * pixelSpacingCm) + (slackAllowanceInches * 2.54)  // convert slack to cm
+      : 0;
+    const stringLengthM = stringLengthCm / 100;  // convert to meters
+    const stringLengthFt = stringLengthM * 3.28084;  // convert to feet
+
     const amps = pixels * (wattsPerPixel * brightness / VOLTS);
     const watts = pixels * wattsPerPixel * brightness;
     const rwuAmps = amps * rwuFactor;
@@ -3364,6 +3391,8 @@ function _calculateMegatree() {
       angle: angle,
       length: strandLength,
       pixels: pixels,
+      stringLengthM: stringLengthM,
+      stringLengthFt: stringLengthFt,
       amps: amps,
       watts: watts,
       rwuAmps: rwuAmps,
@@ -3393,6 +3422,16 @@ function _calculateMegatree() {
   const avgStrandLength = strandData.reduce((sum, s) => sum + s.length, 0) / strandCount;
   const strandsPerPSU = Math.ceil(strandCount / numPS);
 
+  // ── Seed Pixel Roll Calculations ──────────────────────────────────────────
+  const totalStringLengthM = pixelMode === 'calculated'
+    ? strandData.reduce((sum, s) => sum + s.stringLengthM, 0)
+    : 0;
+  const pixelsPerRoll = 1000;  // Standard seed pixel roll
+  const rollLengthM = pixelsPerRoll * pixelSpacingCm / 100;  // Length of one roll in meters
+  const rollsNeeded = pixelMode === 'calculated'
+    ? Math.ceil(totalStringLengthM / rollLengthM)
+    : 0;
+
   // ── Render Per-Strand Table ───────────────────────────────────────────────
   let strandTableRows = '';
   strandData.forEach(s => {
@@ -3402,7 +3441,8 @@ function _calculateMegatree() {
     strandTableRows += `<tr>
       <td>Strand ${s.strandNum}</td>
       <td>${s.angle.toFixed(0)}°</td>
-      <td>${s.length.toFixed(1)} ft</td>
+      <td>${s.length.toFixed(1)} ft${pixelMode === 'calculated' ? '<br><span style="font-size:.72rem;color:var(--muted);">geometric</span>' : ''}</td>
+      ${pixelMode === 'calculated' ? `<td>${s.stringLengthM.toFixed(2)} m<br><span style="font-size:.72rem;color:var(--muted);">(${s.stringLengthFt.toFixed(1)} ft)</span></td>` : ''}
       <td>${s.pixels}</td>
       <td>${s.amps.toFixed(2)} A<br><span style="font-size:.72rem;color:var(--ok);">RWU ~${s.rwuAmps.toFixed(2)}A</span></td>
       <td>${s.watts.toFixed(1)} W<br><span style="font-size:.72rem;color:var(--ok);">RWU ~${s.rwuWatts.toFixed(1)}W</span></td>
@@ -3541,6 +3581,17 @@ function _calculateMegatree() {
           <strong>Spools needed:</strong> ${Math.ceil(strandCount * avgStrandLength * 2 / 100)}
         </div>
       </div>
+
+      ${pixelMode === 'calculated' ? `<div class="card ok">
+        <div class="card-title">Seed Pixel Rolls Needed</div>
+        <div class="card-value">${rollsNeeded}</div>
+        <div class="card-unit">rolls of 1000 pixels @ ${pixelSpacingCm}cm</div>
+        <div class="card-detail">
+          <strong>Total string length:</strong> ${totalStringLengthM.toFixed(1)} m (${(totalStringLengthM * 3.28084).toFixed(0)} ft)<br>
+          <strong>Per roll:</strong> ${rollLengthM.toFixed(1)} m (${pixelsPerRoll} pixels @ ${pixelSpacingCm}cm)<br>
+          <strong>Slack allowance:</strong> ${slackAllowanceInches}" per strand
+        </div>
+      </div>` : ''}
     </div>
 
     <div class="result-section">
@@ -3551,7 +3602,8 @@ function _calculateMegatree() {
             <tr>
               <th>Strand</th>
               <th>Angle</th>
-              <th>Length</th>
+              <th>${pixelMode === 'calculated' ? 'Geometric Length' : 'Length'}</th>
+              ${pixelMode === 'calculated' ? '<th>String Length to Cut</th>' : ''}
               <th>Pixels</th>
               <th>Current</th>
               <th>Power</th>
