@@ -3663,28 +3663,362 @@ function _calculateMegatree() {
       </div>
     </div>
 
-    ${highWindMode ? `<div class="result-section">
-      <div class="result-section-header">&#9888; Structural Recommendations (High Wind Mode: ${windSpeed} mph)</div>
+    <!-- Construction Guide Section -->
+    <div class="result-section">
+      <div class="result-section-header">🔨 Construction Guide &mdash; Materials & Assembly Instructions</div>
       <div class="result-section-body" style="padding:20px;">
-        <div style="background:rgba(245,158,11,.08); border:1px solid rgba(245,158,11,.3); border-radius:8px; padding:15px; margin-bottom:15px;">
-          <div style="font-weight:700; color:var(--warn); margin-bottom:10px; font-size:.95rem;">⚠ High Wind Zone Recommendations</div>
-          <div style="color:var(--text); line-height:1.7; font-size:.85rem;">
-            <strong>Guy Wire Configuration:</strong> ${windSpeed >= 40 ? '6-point or 8-point anchoring system (stronger than 4-point)' : '4-point anchoring system (recommended minimum)'}<br>
-            <strong>Guy Wire Diameter:</strong> ${windSpeed >= 40 ? '3/16" galvanized steel cable (heavy duty)' : '1/8" to 3/16" galvanized steel cable'}<br>
-            <strong>Guy Wire Quantity:</strong> ${windSpeed >= 40 ? 'Multiple tiers (attach at 1/3, 2/3, and top of pole)' : 'Single tier from top acceptable for heights <25ft'}<br>
-            <strong>Ground Anchors:</strong> ${windSpeed >= 40 ? 'Concrete deadman anchors or 48" auger anchors' : '36" auger anchors (minimum)'}<br>
-            <strong>Strand Tensioners:</strong> <span style="color:var(--ok);">${strandCount} × spring hooks recommended</span> (affordable for ${strandCount} strands, ~$0.50-1.00 each)<br>
-            ${strandCount > 96 ? `<strong>Alternative:</strong> Small turnbuckles for bottom 25% of strands (high-load strands), spring hooks for remaining ${Math.floor(strandCount * 0.75)} strands (cost effective)<br>` : ''}
-            <strong>Pole Material:</strong> ${windSpeed >= 40 ? 'Steel conduit or aluminum pole (NOT PVC for high wind)' : 'EMT conduit 1" or larger, OR steel pole'}<br>
-            <strong>Base Type:</strong> ${height > 25 || windSpeed >= 40 ? 'Concrete footing required (24" diameter × 48" deep minimum)' : 'In-ground stake with concrete collar acceptable'}<br>
+
+        ${(() => {
+          // Calculate materials based on tree configuration
+          const guyWirePoints = highWindMode ? (windSpeed >= 40 ? 4 : 4) : 3;
+          const guyWireDiameter = highWindMode && windSpeed >= 40 ? '3/16"' : '1/8"';
+          const anchorType = highWindMode && windSpeed >= 40 ? '48" auger anchors' : '36" auger anchors';
+          const poleMinDiameter = height > 25 ? '1.5"' : height > 15 ? '1.25"' : '1"';
+          const poleMaterial = highWindMode && windSpeed >= 40 ? 'Steel conduit or aluminum pole' : 'EMT conduit';
+          const basePlateSize = height > 25 ? '18" × 18"' : '12" × 12"';
+          const basePlateThickness = height > 25 ? '1/2"' : '3/8"';
+          const topPlateSize = strandCount > 96 ? '18" diameter' : strandCount > 48 ? '14" diameter' : '12" diameter';
+          const eyeBoltSize = '3/8" × 4"';
+          const strandSupport = 'Galvanized steel cable or monofilament';
+          const controllerBoxSize = numPS > 8 ? '24" × 24" × 10"' : numPS > 4 ? '20" × 16" × 8"' : '16" × 12" × 6"';
+
+          // Guy wire calculations
+          const avgAnchorDist = baseRadius * 1.8;  // Anchors at 1.8× radius from pole
+          const guyWireLength = Math.sqrt(height * height + avgAnchorDist * avgAnchorDist);
+          const totalGuyWireLength = guyWireLength * guyWirePoints;
+
+          // Pole sections (10ft standard EMT/steel conduit)
+          const poleSections = Math.ceil(height / 10);
+          const couplings = poleSections - 1;
+
+          // Concrete for base (if needed)
+          const needsConcrete = height > 20 || (highWindMode && windSpeed >= 30);
+          const footingDiameter = height > 25 ? 24 : 18;  // inches
+          const footingDepth = height > 25 ? 48 : 36;  // inches
+          const concreteVolumeCuFt = needsConcrete ? (Math.PI * Math.pow(footingDiameter / 2 / 12, 2) * (footingDepth / 12)) : 0;
+          const concreteBags = needsConcrete ? Math.ceil(concreteVolumeCuFt / 0.6) : 0;  // 80lb bag = 0.6 cu ft
+
+          return `
+        <!-- Materials List -->
+        <div style="margin-bottom:30px;">
+          <h3 style="color:var(--accent); margin-bottom:15px; font-size:1.1rem;">📋 Materials List</h3>
+
+          <div style="display:grid; gap:20px;">
+
+            <!-- Structure Materials -->
+            <div style="background:var(--panel2); border-radius:8px; padding:15px;">
+              <div style="font-weight:700; color:var(--text); margin-bottom:10px; font-size:.95rem;">🏗️ Structure</div>
+              <table style="width:100%; font-size:.85rem;">
+                <tr><td style="padding:4px 0;"><strong>Center Pole:</strong></td><td>${poleSections} × 10ft ${poleMaterial} (${poleMinDiameter} minimum diameter)</td></tr>
+                ${couplings > 0 ? `<tr><td style="padding:4px 0;"><strong>Pole Couplings:</strong></td><td>${couplings} × set-screw couplings (match pole diameter)</td></tr>` : ''}
+                <tr><td style="padding:4px 0;"><strong>Base Plate:</strong></td><td>1 × ${basePlateSize} × ${basePlateThickness}" steel plate</td></tr>
+                <tr><td style="padding:4px 0;"><strong>Top Plate:</strong></td><td>1 × ${topPlateSize} × 1/4" aluminum or steel plate</td></tr>
+                <tr><td style="padding:4px 0;"><strong>Guy Wires:</strong></td><td>${guyWirePoints} × ${guyWireLength.toFixed(1)}ft ${guyWireDiameter} galvanized steel cable (${totalGuyWireLength.toFixed(0)}ft total)</td></tr>
+                <tr><td style="padding:4px 0;"><strong>Ground Anchors:</strong></td><td>${guyWirePoints} × ${anchorType}</td></tr>
+                ${needsConcrete ? `<tr><td style="padding:4px 0;"><strong>Concrete:</strong></td><td>${concreteBags} × 80lb bags (${footingDiameter}" diameter × ${footingDepth}" deep footing)</td></tr>` : ''}
+              </table>
+            </div>
+
+            <!-- Hardware -->
+            <div style="background:var(--panel2); border-radius:8px; padding:15px;">
+              <div style="font-weight:700; color:var(--text); margin-bottom:10px; font-size:.95rem;">🔩 Hardware</div>
+              <table style="width:100%; font-size:.85rem;">
+                <tr><td style="padding:4px 0;"><strong>Eye Bolts (top plate):</strong></td><td>${strandCount} × ${eyeBoltSize} galvanized eye bolts with nuts & washers</td></tr>
+                <tr><td style="padding:4px 0;"><strong>Guy Wire Turnbuckles:</strong></td><td>${guyWirePoints} × 3/8" turnbuckles with hooks (for tensioning guy wires)</td></tr>
+                <tr><td style="padding:4px 0;"><strong>Cable Thimbles:</strong></td><td>${guyWirePoints * 2} × ${guyWireDiameter} thimbles (2 per guy wire)</td></tr>
+                <tr><td style="padding:4px 0;"><strong>Cable Clamps:</strong></td><td>${guyWirePoints * 4} × ${guyWireDiameter} U-bolt cable clamps (4 per guy wire)</td></tr>
+                <tr><td style="padding:4px 0;"><strong>Strand Tensioners:</strong></td><td>${strandCount} × spring hooks (affordable) ${strandCount > 96 ? `OR ${Math.ceil(strandCount * 0.25)} turnbuckles + ${Math.floor(strandCount * 0.75)} spring hooks (hybrid)` : ''}</td></tr>
+                <tr><td style="padding:4px 0;"><strong>Base Bolts:</strong></td><td>4 × 1/2" × 6" anchor bolts with nuts & washers (secure base plate)</td></tr>
+              </table>
+            </div>
+
+            <!-- Electrical -->
+            <div style="background:var(--panel2); border-radius:8px; padding:15px;">
+              <div style="font-weight:700; color:var(--text); margin-bottom:10px; font-size:.95rem;">⚡ Electrical Components</div>
+              <table style="width:100%; font-size:.85rem;">
+                <tr><td style="padding:4px 0;"><strong>Pixels:</strong></td><td>${totalPixels.toLocaleString()} × ${VOLTS}V seed pixels (${pixelMode === 'calculated' ? pixelSpacingCm + 'cm spacing' : 'uniform'})</td></tr>
+                ${pixelMode === 'calculated' ? `<tr><td style="padding:4px 0;"><strong>Pixel Rolls:</strong></td><td>${rollsNeeded} × 1000-pixel rolls (${pixelSpacingCm}cm spacing = ${rollLengthM.toFixed(1)}m per roll)</td></tr>` : ''}
+                <tr><td style="padding:4px 0;"><strong>Power Supplies:</strong></td><td>${numPS} × ${ps.name} (${ps.watts}W each)</td></tr>
+                <tr><td style="padding:4px 0;"><strong>Controller:</strong></td><td>1 × pixel controller (${strandCount}-port minimum, or use differential receivers)</td></tr>
+                <tr><td style="padding:4px 0;"><strong>Strand Feed Wire:</strong></td><td>${strandCount} pairs × ${avgStrandLength.toFixed(1)}ft ${strandGauge} AWG wire (${(strandCount * avgStrandLength * 2).toFixed(0)}ft total)</td></tr>
+                <tr><td style="padding:4px 0;"><strong>Power Distribution Wire:</strong></td><td>12 AWG wire for PSU-to-controller backbone (estimate ${(numPS * 10).toFixed(0)}ft)</td></tr>
+                <tr><td style="padding:4px 0;"><strong>Weatherproof Enclosure:</strong></td><td>1 × ${controllerBoxSize} NEMA 4X enclosure (for PSUs & controller)</td></tr>
+                <tr><td style="padding:4px 0;"><strong>Fuses/Breakers:</strong></td><td>${numPS} × inline fuse holders + fuses (match PSU amperage)</td></tr>
+                <tr><td style="padding:4px 0;"><strong>Connectors:</strong></td><td>${strandCount * 2} × weatherproof pixel connectors (Ray Wu, BTF-Lighting, etc.)</td></tr>
+                <tr><td style="padding:4px 0;"><strong>GFCI Protection:</strong></td><td>1 × outdoor GFCI outlet or breaker (required for safety)</td></tr>
+              </table>
+            </div>
+
+            <!-- Strand Support -->
+            <div style="background:var(--panel2); border-radius:8px; padding:15px;">
+              <div style="font-weight:700; color:var(--text); margin-bottom:10px; font-size:.95rem;">🎯 Strand Support System</div>
+              <table style="width:100%; font-size:.85rem;">
+                <tr><td style="padding:4px 0;"><strong>Support Type:</strong></td><td>${strandSupport}</td></tr>
+                <tr><td style="padding:4px 0;"><strong>Support Length:</strong></td><td>${strandCount} × ${avgStrandLength.toFixed(1)}ft = ${(strandCount * avgStrandLength).toFixed(0)}ft total</td></tr>
+                <tr><td style="padding:4px 0;"><strong>Steel Cable Option:</strong></td><td>1/16" galvanized cable (~200lb break strength)</td></tr>
+                <tr><td style="padding:4px 0;"><strong>Monofilament Option:</strong></td><td>150-200lb test monofilament fishing line (cheaper, less visible)</td></tr>
+                <tr><td style="padding:4px 0;"><strong>Ferrules/Crimps:</strong></td><td>${strandCount * 2} × cable ferrules or crimps (2 per strand)</td></tr>
+              </table>
+            </div>
+
+            <!-- Miscellaneous -->
+            <div style="background:var(--panel2); border-radius:8px; padding:15px;">
+              <div style="font-weight:700; color:var(--text); margin-bottom:10px; font-size:.95rem;">🧰 Miscellaneous</div>
+              <table style="width:100%; font-size:.85rem;">
+                <tr><td style="padding:4px 0;"><strong>Zip Ties:</strong></td><td>${Math.ceil(totalPixels / 10)} × UV-resistant zip ties (secure pixels to strand support)</td></tr>
+                <tr><td style="padding:4px 0;"><strong>Wire Loom:</strong></td><td>${Math.ceil((numPS * 10) / 10)} × 10ft split loom tubing (protect power wires)</td></tr>
+                <tr><td style="padding:4px 0;"><strong>Electrical Tape:</strong></td><td>2-3 rolls vinyl electrical tape (weatherproofing)</td></tr>
+                <tr><td style="padding:4px 0;"><strong>Heat Shrink Tubing:</strong></td><td>Assorted sizes for wire connections</td></tr>
+                <tr><td style="padding:4px 0;"><strong>Dielectric Grease:</strong></td><td>1 tube (weatherproof connectors)</td></tr>
+                <tr><td style="padding:4px 0;"><strong>Silicone Sealant:</strong></td><td>1 tube (seal enclosure penetrations)</td></tr>
+              </table>
+            </div>
+
           </div>
         </div>
-        <div style="font-size:.8rem; color:var(--muted); font-style:italic;">
-          These recommendations are based on ${height.toFixed(0)}ft height, ${baseDiam.toFixed(0)}ft base diameter, ${strandCount} strands, and ${windSpeed} mph wind speed.
-          Consult local building codes and consider professional engineering for trees >30ft or wind >40mph.
+
+        <!-- Assembly Instructions -->
+        <div style="margin-bottom:30px;">
+          <h3 style="color:var(--accent); margin-bottom:15px; font-size:1.1rem;">🔧 Step-by-Step Assembly Instructions</h3>
+
+          <div style="background:var(--panel2); border-radius:8px; padding:20px; line-height:1.8; font-size:.85rem;">
+
+            <div style="margin-bottom:20px;">
+              <div style="font-weight:700; color:var(--text); margin-bottom:8px;">Step 1: Base Preparation</div>
+              <ol style="margin:0; padding-left:20px;">
+                <li>Mark center point for tree location</li>
+                ${needsConcrete ? `<li>Dig footing hole: ${footingDiameter}" diameter × ${footingDepth}" deep</li>` : '<li>Drive ground stake or dig 24" deep hole for pole</li>'}
+                ${needsConcrete ? `<li>Pour concrete and insert 4 anchor bolts in square pattern (match base plate holes)</li>` : ''}
+                ${needsConcrete ? `<li>Allow concrete to cure 48-72 hours before proceeding</li>` : ''}
+                <li>Drill 1/2" hole through base plate center (for pole)</li>
+                <li>Drill 4 holes in corners of base plate (for anchor bolts)</li>
+                ${needsConcrete ? `<li>Bolt base plate to anchor bolts embedded in concrete</li>` : '<li>Secure base plate level to ground</li>'}
+              </ol>
+            </div>
+
+            <div style="margin-bottom:20px;">
+              <div style="font-weight:700; color:var(--text); margin-bottom:8px;">Step 2: Pole Assembly</div>
+              <ol style="margin:0; padding-left:20px;">
+                <li>Insert first pole section through base plate center hole</li>
+                <li>Secure pole to base plate with set screws or U-bolts</li>
+                ${poleSections > 1 ? `<li>Connect additional pole sections using set-screw couplings (total ${poleSections} sections)</li>` : ''}
+                <li>Ensure pole is plumb (use level on multiple sides)</li>
+                <li><strong>Important:</strong> Do NOT raise full height yet - work on ground if possible</li>
+              </ol>
+            </div>
+
+            <div style="margin-bottom:20px;">
+              <div style="font-weight:700; color:var(--text); margin-bottom:8px;">Step 3: Top Plate Installation</div>
+              <ol style="margin:0; padding-left:20px;">
+                <li>Drill center hole in top plate (match pole diameter for snug fit)</li>
+                <li>Mark ${strandCount} evenly-spaced points around edge (${angleStep.toFixed(1)}° apart)</li>
+                <li>Drill holes for ${eyeBoltSize} eye bolts at each marked point</li>
+                <li>Install eye bolts through holes with nuts & washers on underside</li>
+                <li>Slide top plate onto pole (leave 6-12" at top for cap/topper)</li>
+                <li>Secure top plate with set screws or through-bolts</li>
+              </ol>
+            </div>
+
+            <div style="margin-bottom:20px;">
+              <div style="font-weight:700; color:var(--text); margin-bottom:8px;">Step 4: Guy Wire Anchor Installation</div>
+              <ol style="margin:0; padding-left:20px;">
+                <li>Mark ${guyWirePoints} anchor points at ${360/guyWirePoints}° intervals (${guyWirePoints === 3 ? '120°' : guyWirePoints === 4 ? '90°' : '60°'} spacing)</li>
+                <li>Distance from pole: ${(baseRadius * 1.8).toFixed(1)}ft (1.5-2× tree base radius)</li>
+                <li>Install ${anchorType} at each marked point</li>
+                <li>Screw/drive anchors until eye is ~3" above ground</li>
+              </ol>
+            </div>
+
+            <div style="margin-bottom:20px;">
+              <div style="font-weight:700; color:var(--text); margin-bottom:8px;">Step 5: Guy Wire Installation</div>
+              <ol style="margin:0; padding-left:20px;">
+                <li>Cut ${guyWirePoints} guy wires to ${guyWireLength.toFixed(1)}ft each (add 2ft extra for loops)</li>
+                <li>Create loop at one end using thimble + 2 cable clamps</li>
+                <li>Attach loop to eye bolt on pole (near top)</li>
+                <li>Run wire down to ground anchor</li>
+                <li>Create second loop with thimble through turnbuckle hook</li>
+                <li>Attach turnbuckle to ground anchor</li>
+                <li>Repeat for all ${guyWirePoints} guy wires</li>
+                <li><strong>Tensioning:</strong> Use turnbuckles to tension wires evenly (pole should be plumb)</li>
+              </ol>
+            </div>
+
+            <div style="margin-bottom:20px;">
+              <div style="font-weight:700; color:var(--text); margin-bottom:8px;">Step 6: Strand Support Installation</div>
+              <ol style="margin:0; padding-left:20px;">
+                <li>Cut ${strandCount} strand supports to ${avgStrandLength.toFixed(1)}ft each</li>
+                <li>Attach one end to eye bolt on top plate (use ferrule/crimp or secure loop)</li>
+                <li>Run strand support down to ground anchor point (can use tent stakes)</li>
+                <li>Install spring hook or small turnbuckle at bottom for tensioning</li>
+                <li>Tension each strand support to remove slack (don't over-tension)</li>
+              </ol>
+            </div>
+
+            <div style="margin-bottom:20px;">
+              <div style="font-weight:700; color:var(--text); margin-bottom:8px;">Step 7: Electrical Enclosure Mounting</div>
+              <ol style="margin:0; padding-left:20px;">
+                <li><strong>Location:</strong> Mount weatherproof enclosure at base of pole (2-3ft from ground)</li>
+                <li>Options: Attach to pole with U-bolts, OR mount on separate post, OR place on ground with cinderblock base</li>
+                <li>Enclosure size: ${controllerBoxSize} minimum (hold ${numPS} PSUs + controller)</li>
+                <li>Ensure enclosure door opens away from prevailing wind/rain</li>
+                <li>Drill cable entry holes in bottom (allows water to drain out)</li>
+              </ol>
+            </div>
+
+            <div style="margin-bottom:20px;">
+              <div style="font-weight:700; color:var(--text); margin-bottom:8px;">Step 8: Power Supply & Controller Installation</div>
+              <ol style="margin:0; padding-left:20px;">
+                <li>Mount ${numPS} power supplies inside enclosure (DIN rail or screws)</li>
+                <li>Mount controller inside enclosure (or use separate enclosure if space limited)</li>
+                <li>Wire AC input through GFCI protection to all PSUs (parallel)</li>
+                <li>Run 12 AWG DC power wire from each PSU output to controller power input terminals</li>
+                <li>Use fuse holders on each PSU output (match PSU amperage rating)</li>
+                <li>Organize wires with zip ties and label everything</li>
+              </ol>
+            </div>
+
+            <div style="margin-bottom:20px;">
+              <div style="font-weight:700; color:var(--text); margin-bottom:8px;">Step 9: Pixel String Assembly & Installation</div>
+              <ol style="margin:0; padding-left:20px;">
+                ${pixelMode === 'calculated' ? `<li>Cut ${strandCount} pixel strings from rolls: ${stringLengthM.toFixed(2)}m (${stringLengthFt.toFixed(1)}ft) each</li>` : `<li>Prepare ${strandCount} pixel strings with ${uniformPixels} pixels each</li>`}
+                <li>Add slack allowance for top/bottom connections (${slackAllowanceInches}" recommended)</li>
+                <li>Attach pixel strings to strand support wires using UV-resistant zip ties (every 10-20 pixels)</li>
+                <li>Run strand feed wires (${strandGauge} AWG) from controller to start of each pixel string</li>
+                <li>Use weatherproof connectors at all connection points</li>
+                <li>Apply dielectric grease to all connectors</li>
+                <li>Data connections: Run from controller data outputs to first pixel of each strand</li>
+              </ol>
+            </div>
+
+            <div style="margin-bottom:20px;">
+              <div style="font-weight:700; color:var(--text); margin-bottom:8px;">Step 10: Testing & Commissioning</div>
+              <ol style="margin:0; padding-left:20px;">
+                <li><strong>Before powering on:</strong> Visual inspection of all connections</li>
+                <li>Check for any exposed wire or loose connections</li>
+                <li>Verify polarity on all power connections (+ to +, - to -)</li>
+                <li>Power on ONE PSU at a time and test strands connected to it</li>
+                <li>Check voltage at first pixel of each strand (should be ≥${VOLT_DEFAULTS[VOLTS][pixelType].minV}V)</li>
+                <li>Test all strands with controller (use test pattern)</li>
+                <li>Once all working, seal enclosure penetrations with silicone</li>
+                <li>Apply electrical tape and heat shrink to any exposed connections</li>
+              </ol>
+            </div>
+
+          </div>
         </div>
+
+        <!-- Visual Diagrams -->
+        <div style="margin-bottom:20px;">
+          <h3 style="color:var(--accent); margin-bottom:15px; font-size:1.1rem;">📐 Visual Diagrams</h3>
+
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:20px;">
+
+            <!-- Guy Wire Layout -->
+            <div style="background:var(--panel2); border-radius:8px; padding:15px;">
+              <div style="font-weight:600; text-align:center; margin-bottom:10px; color:var(--text);">Guy Wire Anchor Layout</div>
+              <svg width="280" height="280" style="background:white; border-radius:8px;">
+                <circle cx="140" cy="140" r="100" fill="none" stroke="#ddd" stroke-width="2" stroke-dasharray="5,5"/>
+                <circle cx="140" cy="140" r="8" fill="#4f8ef7"/>
+                <text x="140" y="145" text-anchor="middle" font-size="10" fill="white">Pole</text>
+                ${Array.from({length: guyWirePoints}, (_, i) => {
+                  const angle = (i * 360 / guyWirePoints - 90) * Math.PI / 180;
+                  const x = 140 + Math.cos(angle) * 100;
+                  const y = 140 + Math.sin(angle) * 100;
+                  return `
+                    <line x1="140" y1="140" x2="${x}" y2="${y}" stroke="#f59e0b" stroke-width="2" stroke-dasharray="3,3"/>
+                    <circle cx="${x}" cy="${y}" r="6" fill="#f59e0b"/>
+                    <text x="${x}" y="${y + (Math.sin(angle) > 0 ? 20 : -10)}" text-anchor="middle" font-size="10" fill="#333">Anchor ${i+1}</text>
+                    <text x="${x + Math.cos(angle) * 15}" y="${y + Math.sin(angle) * 15}" text-anchor="middle" font-size="9" fill="#666">${(i * 360 / guyWirePoints).toFixed(0)}°</text>
+                  `;
+                }).join('')}
+                <text x="140" y="260" text-anchor="middle" font-size="12" fill="#333">${guyWirePoints}-Point Anchoring (${(360/guyWirePoints).toFixed(0)}° spacing)</text>
+              </svg>
+              <div style="font-size:.75rem; color:#666; margin-top:10px; text-align:center;">
+                Anchor distance: ${(baseRadius * 1.8).toFixed(1)}ft from pole<br>
+                Guy wire length: ${guyWireLength.toFixed(1)}ft each
+              </div>
+            </div>
+
+            <!-- Electrical Box Mounting -->
+            <div style="background:var(--panel2); border-radius:8px; padding:15px;">
+              <div style="font-weight:600; text-align:center; margin-bottom:10px; color:var(--text);">Electrical Enclosure Mounting</div>
+              <svg width="280" height="280" style="background:white; border-radius:8px;">
+                <!-- Ground -->
+                <rect x="0" y="220" width="280" height="60" fill="#8b7355"/>
+                <line x1="0" y1="220" x2="280" y2="220" stroke="#654321" stroke-width="2"/>
+
+                <!-- Pole -->
+                <rect x="130" y="20" width="20" height="200" fill="#4f8ef7" rx="3"/>
+                <text x="140" y="35" text-anchor="middle" font-size="10" fill="white">Pole</text>
+
+                <!-- Base Plate -->
+                <rect x="100" y="210" width="80" height="10" fill="#666"/>
+                <text x="140" y="235" text-anchor="middle" font-size="9" fill="white">Base Plate</text>
+
+                <!-- Enclosure at base -->
+                <rect x="30" y="160" width="70" height="60" fill="#f3f4f6" stroke="#333" stroke-width="2" rx="4"/>
+                <rect x="35" y="165" width="40" height="50" fill="#e5e7eb" stroke="#666" stroke-width="1"/>
+                <text x="65" y="188" text-anchor="middle" font-size="8" fill="#333">PSUs</text>
+                <text x="65" y="198" text-anchor="middle" font-size="8" fill="#333">&</text>
+                <text x="65" y="208" text-anchor="middle" font-size="8" fill="#333">Controller</text>
+
+                <!-- Mounting strap -->
+                <rect x="28" y="185" width="5" height="30" fill="#666"/>
+                <rect x="97" y="185" width="5" height="30" fill="#666"/>
+                <line x1="102" y1="200" x2="130" y2="200" stroke="#666" stroke-width="2"/>
+
+                <!-- Labels -->
+                <text x="65" y="150" text-anchor="middle" font-size="11" fill="#333" font-weight="600">2-3ft</text>
+                <line x1="65" y1="155" x2="65" y2="220" stroke="#999" stroke-width="1" stroke-dasharray="2,2"/>
+
+                <text x="140" y="265" text-anchor="middle" font-size="10" fill="white">Mount enclosure at pole base</text>
+                <text x="140" y="275" text-anchor="middle" font-size="8" fill="#ccc">Size: ${controllerBoxSize} NEMA 4X</text>
+              </svg>
+              <div style="font-size:.75rem; color:#666; margin-top:10px; text-align:center;">
+                <strong>Best Practices:</strong><br>
+                • 2-3ft above ground (prevents flooding)<br>
+                • Secure with U-bolts or mounting bracket<br>
+                • Door faces away from wind/rain
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+        ${highWindMode ? `
+        <!-- High Wind Recommendations -->
+        <div style="background:rgba(245,158,11,.08); border:1px solid rgba(245,158,11,.3); border-radius:8px; padding:15px; margin-bottom:15px;">
+          <div style="font-weight:700; color:var(--warn); margin-bottom:10px; font-size:.95rem;">⚠ High Wind Zone Additional Recommendations (${windSpeed} mph)</div>
+          <div style="color:var(--text); line-height:1.7; font-size:.85rem;">
+            <strong>Enhanced Structural Requirements:</strong><br>
+            • ${windSpeed >= 40 ? 'Consider 6-point or 8-point guy wire system (stronger than 4-point)' : '4-point guy wire system minimum'}<br>
+            • ${windSpeed >= 40 ? 'Use 3/16" guy wire cable (NOT 1/8")' : 'Use 1/8" to 3/16" guy wire cable'}<br>
+            • ${windSpeed >= 40 ? 'Multiple tiers of guy wires recommended (attach at 1/3, 2/3, and top of pole)' : 'Consider dual-tier guy wires for heights >25ft'}<br>
+            • ${windSpeed >= 40 ? 'Concrete deadman anchors or 48" auger anchors required' : '36" auger anchors minimum'}<br>
+            • ${windSpeed >= 40 ? 'Steel or aluminum pole REQUIRED (NOT PVC)' : 'EMT conduit acceptable, but steel preferred'}<br>
+            • Concrete footing ${height > 25 || windSpeed >= 40 ? 'REQUIRED' : 'strongly recommended'} (${footingDiameter}" diameter × ${footingDepth}" deep minimum)<br>
+          </div>
+        </div>
+        ` : ''}
+
+        <div style="background:rgba(34,197,94,.08); border:1px solid rgba(34,197,94,.3); border-radius:8px; padding:15px;">
+          <div style="font-weight:700; color:var(--ok); margin-bottom:8px; font-size:.9rem;">💡 Pro Tips</div>
+          <ul style="margin:0; padding-left:20px; line-height:1.8; font-size:.82rem; color:var(--text);">
+            <li><strong>Work safely:</strong> Use helpers when raising pole, never work alone on tall structures</li>
+            <li><strong>Test before installing:</strong> Test all pixels on ground before mounting to strands</li>
+            <li><strong>Label everything:</strong> Label all wires, PSUs, and strands during installation</li>
+            <li><strong>Weatherproof religiously:</strong> Use dielectric grease + silicone + heat shrink on every connection</li>
+            <li><strong>Plan for disassembly:</strong> Use quick-disconnect connectors for easier seasonal setup/teardown</li>
+            <li><strong>Check local codes:</strong> Some jurisdictions require permits for structures >${height > 20 ? height.toFixed(0) : '20'}ft tall</li>
+            <li><strong>Consider professional help:</strong> For trees >30ft or in high wind areas, consult structural engineer</li>
+          </ul>
+        </div>
+
+          `;
+        })()}
+
       </div>
-    </div>` : ''}
+    </div>
 
     <div class="result-section">
       <div class="result-section-header">Megatree Visual Representation</div>
