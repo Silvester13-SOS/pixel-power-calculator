@@ -34,7 +34,7 @@ A comprehensive web-based calculator for planning power requirements, wire sizin
 
 ### Quick Start
 
-1. Open the calculator in your web browser
+1. Open the calculator in your web browser - https://silvester13-sos.github.io/pixel-power-calculator/
 2. Select a calculation mode:
    - **String Power Needs** for simple installations
    - **Controller Power Planning** for complex multi-controller setups
