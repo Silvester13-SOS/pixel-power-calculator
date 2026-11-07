@@ -593,6 +593,7 @@
         <option value="falcon">Falcon</option>
         <option value="genius">Genius</option>
         <option value="aldrick">Aldrick / Baldrick</option>
+        <option value="quinled">QuinLED</option>
       </select>
     </div>
 
@@ -2379,6 +2380,21 @@ const CONTROLLERS = {
         notes:'4 banks &times; 4 ports. Open-source community DIY controller (DiY Christmas / AU community forums). Gerber files available.' },
       b32: { name:'Baldrick (32-port)', ports:32, banks:4, portsPerBank:8, maxAmpsPerBank:30,
         notes:'4 banks &times; 8 ports. Open-source DIY controller, larger variant.' },
+    }
+  },
+  quinled: {
+    brand: 'QuinLED',
+    models: {
+      digNext2: { name:'QuinLED Dig-Next-2', ports:2, banks:1, portsPerBank:2, ampsPerPort:15, maxAmpsPerBank:20,
+        notes:'2 data outputs, 3 fused power terminals (2&times;5A + 1&times;10A). 20A continuous (board lab-tested 30A). 5V&ndash;48V support. ESP32 (8MB flash, 2MB PSRAM). Runs WLED, ESPHome, ESPixelStick. Small/medium installs.' },
+      digQuadV4: { name:'QuinLED Dig-Quad v4 (Pre-Assembled)', ports:4, banks:1, portsPerBank:4, ampsPerPort:10, maxAmpsPerBank:30,
+        notes:'4 individually level-shifted outputs on a shared power rail. 5 fuses total (2&times;10A + 3&times;5A SMD 2410) &mdash; channels 1&amp;2 share a 10A fuse, channels 3&amp;4 share a 10A fuse. 30A continuous / 50A peak board-wide. 5V&ndash;24V. ESP32. Runs WLED, ESPHome.' },
+      digOctaPower5: { name:'QuinLED Dig-Octa + Power-5 (50A)', ports:8, banks:1, portsPerBank:8, ampsPerPort:10, maxAmpsPerBank:50,
+        notes:'Dig-Octa Brainboard-32-8L (ESP32, Ethernet, MicroSD) + Power-5 distribution board: 12 pluggable 5.08mm output terminals, 10A fuse max per output, 50A continuous via up to 3 input wires. 5V&ndash;24V. Runs WLED, ESPHome, ESPixelStick.' },
+      digOctaPower7: { name:'QuinLED Dig-Octa + Power-7 (50A)', ports:8, banks:1, portsPerBank:8, ampsPerPort:10, maxAmpsPerBank:50,
+        notes:'Dig-Octa Brainboard-32-8L + Power-7 distribution board: 16 &times; 7.62mm screw terminals in 4 fuse banks, 10A fuse max per port with broken-fuse indicator LED, 50A continuous. Screw terminals preferred for permanent/outdoor installs over the Power-5 pluggables.' },
+      digOctaPower7HC: { name:'QuinLED Dig-Octa + Power-7HC (100A)', ports:8, banks:1, portsPerBank:8, ampsPerPort:10, maxAmpsPerBank:100,
+        notes:'Dig-Octa Brainboard-32-8L + Power-7HC (High Current) distribution board: same 16 screw-terminal layout as Power-7 but doubled input capacity &mdash; 100A continuous. Intended for very large single-controller installs where splitting across multiple Brainboards would add complexity.' },
     }
   }
 };
