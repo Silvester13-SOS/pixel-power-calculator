@@ -280,6 +280,21 @@
     font-size:.8rem; line-height:1.55; color: var(--text);
   }
 
+  /* Reset-to-defaults button in sidebar (below Calculate) */
+  .reset-btn {
+    display:block; width:100%;
+    margin-top:8px; padding:8px 12px;
+    background: transparent; color: var(--muted);
+    border:1px solid var(--border); border-radius:7px;
+    font-size:.78rem; cursor:pointer;
+    transition: all .15s ease;
+  }
+  .reset-btn:hover { color: var(--danger); border-color: var(--danger); background: rgba(239,68,68,.06); }
+  .reset-note {
+    margin-top:6px; font-size:.68rem; color: var(--muted);
+    text-align:center; line-height:1.4;
+  }
+
   /* Save-as-PDF toolbar (Batch D: #6) */
   .result-toolbar {
     display:flex; justify-content:flex-end; align-items:center; gap:10px;
@@ -783,6 +798,10 @@
     </div>
 
     <button class="calc-btn" onclick="calculate()">&#9889; Calculate</button>
+    <button class="reset-btn" onclick="resetTabDefaults('string')" title="Reset all inputs on this tab to defaults and clear saved progress">
+      &#8635; Reset to Defaults
+    </button>
+    <div class="reset-note">Your inputs are saved in this browser. Use Reset to start fresh.</div>
   </div>
 
   <!-- MAIN CONTENT -->
@@ -1117,6 +1136,10 @@
     </div>
 
     <button class="calc-btn" onclick="calculateController()">&#9889; Calculate</button>
+    <button class="reset-btn" onclick="resetTabDefaults('ctrl')" title="Reset all inputs on this tab to defaults and clear saved progress">
+      &#8635; Reset to Defaults
+    </button>
+    <div class="reset-note">Your inputs are saved in this browser. Use Reset to start fresh.</div>
   </div><!-- /sidebar -->
 
   <!-- CONTROLLER RESULTS -->
@@ -1356,6 +1379,10 @@
     </div>
 
     <button class="calc-btn" onclick="calculateMegatree()">&#127794; Calculate Megatree</button>
+    <button class="reset-btn" onclick="resetTabDefaults('mt')" title="Reset all inputs on this tab to defaults and clear saved progress">
+      &#8635; Reset to Defaults
+    </button>
+    <div class="reset-note">Your inputs are saved in this browser. Use Reset to start fresh.</div>
 
   </div><!-- /sidebar -->
 
@@ -1682,6 +1709,132 @@ function toggleBeginnerMode() {
   const now = body.classList.contains('beginner-mode');
   label.textContent = now ? 'Advanced Mode' : 'Beginner Mode';
 }
+
+// ── Form state: autofill-off, per-tab cache, reset-to-defaults ──────────────
+// Private-mode + cleared-cookies still showed stale inputs because browsers
+// restore <input>/<select> values from their autofill history on reload.
+// We disable that, and store our own opt-in cache in localStorage instead.
+const FORM_CACHE_KEY = 'pixelCalcState_v1';
+// Sidebar prefixes per tab so one Reset only clears that tab's fields.
+const TAB_PREFIXES = { string: '', ctrl: 'ctrl', mt: 'mt' };
+
+function _sidebarFields(sidebar) {
+  return sidebar ? Array.from(sidebar.querySelectorAll('input[id], select[id]')) : [];
+}
+function _allSidebarFields() {
+  return Array.from(document.querySelectorAll('.sidebar input[id], .sidebar select[id]'));
+}
+function _defaultOf(el) {
+  if (el.tagName === 'SELECT') {
+    for (const opt of el.options) if (opt.defaultSelected) return opt.value;
+    return el.options.length ? el.options[0].value : '';
+  }
+  if (el.type === 'checkbox' || el.type === 'radio') return el.defaultChecked;
+  return el.defaultValue;
+}
+function _applyValue(el, val) {
+  if (el.type === 'checkbox' || el.type === 'radio') el.checked = !!val;
+  else el.value = val;
+}
+
+function disableAutofill() {
+  // 'new-password' is the autofill trick that modern Chromium/Firefox honour
+  // where plain 'off' is ignored for common fields.
+  _allSidebarFields().forEach(el => {
+    if (!el.hasAttribute('autocomplete')) el.setAttribute('autocomplete', 'new-password');
+  });
+}
+
+function saveFormCache() {
+  try {
+    const state = {};
+    _allSidebarFields().forEach(el => {
+      state[el.id] = (el.type === 'checkbox' || el.type === 'radio') ? el.checked : el.value;
+    });
+    localStorage.setItem(FORM_CACHE_KEY, JSON.stringify(state));
+  } catch (e) { /* private-mode denies storage — silent no-op */ }
+}
+
+function loadFormCache() {
+  try {
+    const raw = localStorage.getItem(FORM_CACHE_KEY);
+    if (!raw) return;
+    const state = JSON.parse(raw);
+    _allSidebarFields().forEach(el => {
+      if (Object.prototype.hasOwnProperty.call(state, el.id)) _applyValue(el, state[el.id]);
+    });
+  } catch (e) { /* ignore corrupt cache */ }
+}
+
+function resetTabDefaults(tabKey) {
+  if (!confirm('Reset all inputs on this tab to defaults? Saved progress for this tab will be cleared.')) return;
+  const sidebars = document.querySelectorAll('.sidebar');
+  // Pick the right sidebar: string = first, ctrl = second, mt = third.
+  // Sidebars are inside their tab wrappers so order matches tab order.
+  const idx = tabKey === 'string' ? 0 : tabKey === 'ctrl' ? 1 : 2;
+  const sidebar = sidebars[idx];
+  if (!sidebar) return;
+
+  _sidebarFields(sidebar).forEach(el => _applyValue(el, _defaultOf(el)));
+
+  // Re-fire the handlers that update dependent UI (hidden fields, derived state).
+  try {
+    if (tabKey === 'string') {
+      if (typeof onVoltageChange   === 'function') onVoltageChange();
+      if (typeof onPixelTypeChange === 'function') onPixelTypeChange();
+      if (typeof onInjModelToggle  === 'function') onInjModelToggle();
+      if (typeof onInjSourceChange === 'function') onInjSourceChange();
+      const dens = document.getElementById('density');
+      if (dens) dens.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+    if (tabKey === 'ctrl') {
+      if (typeof toggleCtrlCustomSpacing === 'function') toggleCtrlCustomSpacing();
+    }
+  } catch (e) { /* non-fatal */ }
+
+  // Clear that tab's results pane so the user sees a clean slate.
+  const resultsId = tabKey === 'string' ? 'results' : tabKey === 'ctrl' ? 'ctrlResults' : 'mtResults';
+  const r = document.getElementById(resultsId);
+  if (r) {
+    r.innerHTML = '<div class="empty"><div class="icon">&#9889;</div>'
+                + '<p>Settings reset to defaults. Enter your values and click <strong>Calculate</strong>.</p></div>';
+  }
+
+  // Overwrite cache with the reset state so the fresh defaults persist.
+  saveFormCache();
+}
+
+function _syncDependentUI() {
+  // Fire change + input on each field so handlers that update dependent UI
+  // (custom-voltage visibility, slider value labels, injection sub-fields, etc.)
+  // run after a cache restore.
+  _allSidebarFields().forEach(el => {
+    try {
+      el.dispatchEvent(new Event('change', { bubbles: true }));
+      if (el.tagName === 'INPUT' && (el.type === 'range' || el.type === 'number' || el.type === 'text')) {
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+    } catch (e) { /* non-fatal */ }
+  });
+}
+
+window.addEventListener('DOMContentLoaded', () => {
+  disableAutofill();
+  loadFormCache();
+  _syncDependentUI();
+  // Save on any change anywhere in any sidebar.
+  _allSidebarFields().forEach(el => {
+    el.addEventListener('change', saveFormCache);
+    // Also catch typing in number/text inputs for immediate persistence.
+    if (el.tagName === 'INPUT' && (el.type === 'number' || el.type === 'text' || el.type === 'range')) {
+      el.addEventListener('input', saveFormCache);
+    }
+  });
+  // Re-run the String Power auto-calculation so returning users see results
+  // that reflect their restored cached inputs (the inline calculate() at
+  // bottom of script runs before DOMContentLoaded, i.e. before cache load).
+  try { if (typeof calculate === 'function') calculate(); } catch (e) { /* non-fatal */ }
+});
 
 // ── Save build as PDF (Batch D: #6) ──────────────────────────────────────────
 // Snapshots the results container with html2canvas, exports multi-page PDF via jsPDF.
