@@ -563,11 +563,12 @@
     <div class="field">
       <label>Pixel Density / Spacing <button class="info-btn" onclick="toggleTip(this,'density')">i</button></label>
       <select id="density">
+        <option value="9.8425" selected>4&Prime; bullet-pixel spacing (~10 px/m) — stock bullet harness</option>
         <option value="30">30 px/m — 3.3 cm (1.3 in) spacing</option>
-        <option value="60" selected>60 px/m — 1.65 cm (0.65 in) spacing</option>
+        <option value="60">60 px/m — 1.65 cm (0.65 in) spacing</option>
         <option value="custom" class="advanced-only">Custom — enter spacing in inches</option>
       </select>
-      <div class="field-hint">How close together your pixels are on the wire or strip. Bullet-pixel harnesses are typically <strong>2 in (5 cm)</strong>.</div>
+      <div class="field-hint">How close together your pixels are on the wire or strip. <strong>Stock bullet-pixel harnesses are 4 in (10 cm)</strong>; dense strip is 60 px/m.</div>
     </div>
 
     <div class="field advanced-only" id="customSpacingField" style="display:none">
@@ -1906,7 +1907,7 @@ function calculate() {
   if (v('density') === 'custom') {
     spacingFt = vn('customSpacing') / 12;
   } else {
-    const pxPerM = parseInt(v('density'));
+    const pxPerM = parseFloat(v('density'));
     spacingFt = 3.28084 / pxPerM;
   }
   const totalRunFt = numPixels * spacingFt;
@@ -2721,9 +2722,10 @@ const TIPS = {
     </div>
     <div class="tip-section">
       <div class="tip-section-head">How to find your density</div>
+      &bull; <strong>Bullet pixels</strong> ship on harnesses with <strong>4&Prime; (10 cm)</strong> spacing from the factory — pick the first option.<br>
       &bull; Check the product spec for "pixels per meter" (px/m).<br>
-      &bull; Common WS2811 strips: <strong>30 px/m</strong> (sparse, outdoor pixels) or <strong>60 px/m</strong> (dense strip).<br>
-      &bull; For bullet/module pixels on a wire harness, measure center-to-center between two adjacent nodes and use "Custom."
+      &bull; Common WS2811 strips: <strong>30 px/m</strong> (sparse) or <strong>60 px/m</strong> (dense strip).<br>
+      &bull; For non-standard spacing, measure center-to-center between two adjacent nodes and use "Custom."
     </div>`
   },
   customSpacing: {
