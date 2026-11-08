@@ -1,486 +1,252 @@
 # WS2811 / WS2812B Pixel Power Calculator
 
-A comprehensive web-based calculator for planning power requirements, wire sizing, and circuit distribution for LED pixel installations. Supports both simple string calculations and advanced controller-based planning with MeanWell power supplies and NEC wire sizing standards.
+A web-based planning tool for Christmas pixel installations: power sizing, voltage drop, wire gauges, AC circuit distribution, and multi-bank controller allocation. Built around MeanWell power supplies and NEC continuous-load rules so what the tool recommends matches real-world electrical practice.
 
-## Features
-
-- **Two Calculation Modes:**
-  - **String Power Needs** - Calculate power requirements for basic pixel strings
-  - **Controller Power Planning** - Advanced planning for multi-bank controllers (K2, K4, K8, K16, K32, K40)
-
-- **Comprehensive Power Analysis:**
-  - DC and AC power calculations
-  - Real-World Usage (RWU) factor for realistic power estimates
-  - Power supply sizing with MeanWell PS models
-  - AC circuit distribution planning
-  - Power injection planning and wire gauge recommendations
-
-- **Voltage Drop Analysis:**
-  - PSU-to-Controller wire drop
-  - Controller-to-Extension board wire drop
-  - Extension-to-First-Pixel wire drop
-  - Visual voltage drop chart
-  - Minimum voltage warnings for pixel types
-
-- **Multi-Bank Controller Support:**
-  - Per-bank power breakdown
-  - Per-port power analysis
-  - Bank limit warnings (24A max per bank)
-  - Port limit warnings (6A max per port)
-  - Optimal PSU-to-bank allocation
-  - Power injection mapping for each string
-
-## Getting Started
-
-### Quick Start
-
-1. Open the calculator in your web browser - https://silvester13-sos.github.io/pixel-power-calculator/
-2. Select a calculation mode:
-   - **String Power Needs** for simple installations
-   - **Controller Power Planning** for complex multi-controller setups
-3. Enter your pixel configuration
-4. Review the calculated results and recommendations
-
-## Mode 1: String Power Needs
-
-This mode is ideal for calculating power requirements for basic pixel strings.
-
-### Input Settings
-
-#### Pixel Configuration
-- **Voltage**: Choose 12V (WS2811 resistor/regulated) or 5V (WS2812B regulated)
-- **Pixel Type**:
-  - **Resistor** - Uses resistors for voltage regulation (needs ≥11.0V for 12V pixels)
-  - **Regulated** - Uses onboard voltage regulators (can operate down to ~9.5V)
-- **Watts per Pixel**: Power consumption per pixel at full white (typical: 0.60W for 12V, 0.30W for 5V)
-- **Brightness**: Planned maximum brightness (0-100%)
-- **RWU Factor**: Real-World Usage factor (45-100%) - accounts for typical usage being less than full white at max brightness
-  - 80% is a good default for most installations
-  - 60-70% for displays with varied colors
-  - 90-100% for installations that use full white frequently
-
-#### String Configuration
-- **Total Pixels**: Number of pixels in your string
-- **Pixel Density**: Spacing between pixels (determines injection interval)
-  - Standard densities: 4", 6", 8", 12"
-  - Custom spacing available
-
-#### DC Wiring
-- **PSU→First Pixel Wire (Pigtail)**: Optional wire from power supply to first pixel
-  - Enable checkbox to configure
-  - Select wire gauge (10 AWG - 22 AWG)
-  - Enter wire length in feet
-- **Extension Wire (Ext)**: Wire from controller/injection point to first pixel
-  - Select wire gauge (10 AWG - 22 AWG)
-  - Enter wire length in feet
-
-#### Power Injection
-- **Injection Wire Gauge**: Wire gauge for power injection runs (10 AWG - 22 AWG)
-- **Reduces PSU Load**: When checked, assumes power injection reduces load on main PSU
-  - Useful when injection power comes from separate sources
-  - Uncheck if all injection power comes from the same PSU
-
-#### Power Supply Settings
-- **PS Model**: Select MeanWell power supply model
-  - Options range from 25W to 480W
-  - Automatically filtered based on selected voltage
-- **PS Derate**: Safety factor for power supply sizing
-  - 80% (conservative, recommended)
-  - 90% (moderate)
-  - 100% (max capacity, not recommended for continuous use)
-
-#### AC Circuit Settings
-- **AC Voltage**: Mains voltage (120V for US/Canada, 240V for Europe/UK/AU)
-- **Breaker Amps**: Circuit breaker rating (typically 15A or 20A)
-- **AC Safety**: NEC derating rule
-  - 80% (standard NEC continuous load rule, recommended)
-  - 100% (max capacity, only for non-continuous loads)
-
-### Understanding Results
-
-#### Summary Cards
-- **Total Pixels**: Confirms your pixel count
-- **DC Power Required**: Total DC power needed
-  - Shows both theoretical max and RWU estimate
-- **AC Power Draw**: AC power from mains (accounts for PSU efficiency)
-- **Power Supplies**: Number and type of PSUs needed
-- **15A Circuits Required**: Number of 15A AC circuits needed
-- **DC Feed Chain**: Maximum voltage drop from PS to first pixel
-
-#### Power Supply Specifications Table
-- **Load per PS**: Power draw per supply
-- **AC Draw**: AC current and wattage
-- **Status**: OK or over capacity warning
-
-#### AC Circuit Distribution Table
-- Shows how PSUs should be grouped onto AC circuits
-- Ensures circuits are not overloaded per NEC rules
-
-#### Power Injection Plan Table
-- Shows recommended injection points based on pixel spacing
-- Maximum amps per segment
-- Visual chart of voltage drop along the string
-
-#### DC Wire Gauge Reference
-- Comprehensive table showing safe ampacity for different wire gauges
-- Based on NEC standards for PVC insulation at 60°C in open air
-- Includes both copper (CU) and copper-clad aluminum (CCA) ratings
-
-## Mode 2: Controller Power Planning
-
-This mode provides advanced planning for pixel controllers with multiple banks and ports.
-
-### Input Settings
-
-#### Controller Selection
-- **Brand**: Select controller manufacturer
-  - Hanson (includes Pi-Hat models)
-  - Falcon (includes F16V5, F48, etc.)
-  - Generic
-- **Model**: Select specific controller model
-  - Automatically shows specifications:
-    - Total ports
-    - Ports per bank
-    - Max amps per port (typically 6A)
-    - Max amps per bank (typically 24A)
-
-#### Pixel Configuration
-Same as Mode 1 (Voltage, Pixel Type, Watts per Pixel, Brightness, RWU Factor)
-
-#### Port Configuration Modes
-Three ways to configure pixel distribution across ports:
-
-1. **Uniform** - Same number of pixels on all ports
-   - Enter pixels per port
-   - Applies to all ports on controller
-
-2. **Per-Bank** - Different pixel counts per bank, uniform within each bank
-   - Each bank can have different pixel counts
-   - All ports within a bank have the same count
-
-3. **Per-Port** - Individual configuration for each port
-   - Maximum flexibility
-   - Configure each port independently
-
-#### DC Wiring Options
-- **PSU→Controller Wire (Pigtail)**:
-  - Wire from each PSU to controller power input
-  - Enable/disable via checkbox
-  - Select gauge and length
-
-- **Controller→Extension Board Wire**:
-  - Wire from controller to external fuse/distribution board
-  - Enable/disable via checkbox
-  - Select gauge and length
-  - Ampacity limit shown (20A for 12 AWG, 7A for 18 AWG, etc.)
-
-- **Extension→First Pixel Wire**:
-  - Wire from distribution point to first pixel
-  - Always enabled
-  - Select gauge and length
-
-#### Minimum Voltage Display
-Shows the minimum voltage requirement for selected pixel type and why:
-- **Resistor pixels (12V)**: Need ≥11.0V for consistent color
-- **Regulated pixels (12V)**: Can operate down to ~9.5V (regulator headroom)
-- **5V regulated pixels**: Need ≥4.5V
-
-#### Power Injection Settings
-- **Pixel Density/Spacing**: Same as Mode 1
-- **Injection Wire Gauge**: Wire gauge for power injection
-- **Injection Reduces PSU Load**: Whether injection affects PSU calculation
-
-#### Power Supply & AC Settings
-Same as Mode 1
-
-### Understanding Controller Results
-
-#### Summary Cards
-- **Controller**: Shows selected controller model
-- **Total Pixels**: Total across all ports
-- **Power Supplies Required**: Number and type of PSUs needed
-- **AC Circuits Required**: Number of AC circuits needed
-- **DC Wiring Drops**: Total voltage drop through wiring
-  - Broken down by segment (PSU→Ctrl, Ctrl→Ext, Ext→Pixel)
-  - Shows ampacity warnings if exceeded
-- **Power Injection Needed**: Whether injection is recommended
-  - Shows total injection points and wire needed
-
-#### Per-Bank Power Breakdown Table
-Critical table showing power analysis for each bank:
-
-**Columns:**
-- **Bank**: Bank number
-- **Ports**: Port range (e.g., Ports 1-4)
-- **Px/Port**: Pixels per port (may vary if per-port mode)
-- **Total Pixels**: Sum for the bank
-- **DC Amps**: Total current draw
-  - Shows theoretical max
-  - Shows RWU estimate in green
-  - Shows max per port and RWU per port
-- **DC Watts**: Total wattage
-  - Shows theoretical max
-  - Shows RWU estimate in green
-- **Ext Drop (max)**: Voltage drop on extension wiring
-  - Shows max drop voltage
-  - Shows Ctrl→Ext drop (if enabled)
-  - Shows Ext wire drop
-  - Warning if exceeds wire ampacity
-- **Bank Terminal Status**: **IMPORTANT** - Shows warnings
-  - **Port limit warning**: If any port exceeds 6A limit
-  - **Bank limit warning**: If bank exceeds 24A limit
-  - Shows whether RWU is also over or within limits
-  - Badge colors:
-    - 🔴 Red (danger): Both theoretical AND RWU exceed limits
-    - 🟡 Amber (warning): Only theoretical exceeds, RWU is OK
-    - 🟢 Green (OK): Within all limits
-
-**Example Status Messages:**
-- `⚠ 10.00A/port EXCEEDS 6A limit — RWU OK (~5.50A)` - Amber warning
-- `⚠ 40.00A EXCEEDS 24A bank limit — RWU OK (~22.00A)` - Amber warning
-- Both warnings can appear together if both limits exceeded
-
-#### Power Injection Map Table (Per-Port mode only)
-Shows detailed injection planning for each string:
-- Injection points along each string
-- Voltage at each injection point
-- Wire runs needed
-- Visual color coding (green = good, amber = warning, red = critical)
-
-#### PSU Allocation Table
-Shows optimal grouping of banks onto power supplies:
-
-**Columns:**
-- **PSU #**: Power supply number
-- **Banks Served**: Which bank(s) this PSU powers
-- **DC Load**: DC current and wattage
-  - Shows PSU load (accounts for injection if enabled)
-  - Shows total wattage if different
-  - Shows RWU estimate
-- **PS Utilization**: Percentage of PSU capacity used
-  - 🔴 Red: Overloaded (>100%)
-  - 🟡 Amber: High (>90%)
-  - 🟢 Green: OK
-- **PSU→Ctrl Drop**: Voltage drop on pigtail wire (if enabled)
-  - Shows ampacity warning if exceeded
-- **AC Draw**: AC power consumption at mains
-- **Status**:
-  - `⚠ XXX.XW exceeds PS capacity — RWU OK (~XXX.XW)` if over capacity but RWU is fine
-  - `⚠ XXX.XW exceeds PS capacity — RWU also over (~XXX.XW) — upgrade PS or split bank` if RWU also exceeds
-  - Badge colors match severity (red/amber/green)
-
-#### AC Circuit Distribution Table
-Shows how PSUs should be distributed across AC circuits to comply with NEC rules.
-
-## Tips and Best Practices
-
-### Power Planning
-1. **Use RWU Factor appropriately**:
-   - Don't set too low or you'll over-provision
-   - Don't set too high or you'll under-provision
-   - 80% is a safe default for most installations
-
-2. **Pay attention to bank limits**:
-   - Each bank has only ONE power connection
-   - Maximum 24A per bank
-   - If bank exceeds 24A, you MUST reduce pixel count
-
-3. **Watch port limits**:
-   - Maximum 6A per port (controller limitation)
-   - If port exceeds 6A, reduce pixels on that port
-   - Even if RWU is OK, theoretical max matters for worst-case scenarios
-
-4. **Amber vs Red warnings**:
-   - 🟡 **Amber (soft warning)**: Theoretical max exceeds but RWU is OK
-     - May be acceptable if you're confident in RWU factor
-     - Consider as a "proceed with caution" situation
-   - 🔴 **Red (hard warning)**: Both theoretical AND RWU exceed limits
-     - MUST be fixed - reduce pixel count or reconfigure
-
-### Wire Sizing
-1. **Don't skimp on wire gauge**:
-   - Voltage drop increases with longer runs and higher current
-   - Use thicker wire (lower AWG) for long runs
-   - Check the voltage drop warnings
-
-2. **Minimum voltage matters**:
-   - Resistor pixels need ≥11.0V for consistent colors
-   - Keep total voltage drop under 1.0V for 12V systems
-   - For 5V systems, keep drop under 0.5V
-
-3. **Consider wire type**:
-   - Copper (CU) is better than copper-clad aluminum (CCA)
-   - CCA has higher resistance and lower ampacity
-   - Use CU for critical runs
-
-### Power Injection
-1. **Injection is often necessary**:
-   - Long strings (>100 pixels) usually need injection
-   - Follow the injection map recommendations
-   - Use appropriate gauge wire for injection runs
-
-2. **Injection reduces PSU load**:
-   - Enable "Injection Reduces PSU Load" if power comes from separate sources
-   - Disable if all power (including injection) comes from same PSU
-
-### AC Circuit Planning
-1. **Follow NEC rules**:
-   - Use 80% AC safety factor for continuous loads
-   - Don't exceed breaker ratings
-   - Distribute PSUs across multiple circuits if needed
-
-2. **Plan for circuit availability**:
-   - Ensure you have enough circuits available
-   - Consider dedicated circuits for large installations
-
-## Technical Details
-
-### Voltage Drop Calculations
-Voltage drop is calculated using:
-```
-V_drop = I × R × 2 × L
-```
-Where:
-- I = current in amps
-- R = resistance per foot (from wire gauge)
-- L = length in feet
-- 2 = factor for round-trip (positive and negative conductors)
-
-### Wire Ampacity
-Based on NEC Table 310.15(B)(16) for:
-- PVC insulation
-- 60°C temperature rating
-- Open air installation
-- Copper conductors
-
-### Power Supply Efficiency
-MeanWell power supplies have typical efficiencies of:
-- 88-92% depending on model and load
-- AC draw = DC load / efficiency
-
-### Real-World Usage (RWU)
-RWU factor accounts for:
-- Not all pixels at full brightness simultaneously
-- Color mixing (most patterns don't use full white)
-- Typical usage patterns
-- Safety margin already included in planning
-
-## Troubleshooting
-
-### "Port EXCEEDS 6A limit"
-**Cause**: Too many pixels on one port
-**Solution**:
-- Reduce pixels per port
-- Redistribute pixels to more ports
-- If RWU is OK (amber warning), may be acceptable depending on your confidence in RWU factor
-
-### "Bank EXCEEDS 24A limit"
-**Cause**: Too many pixels on one bank (across all ports in that bank)
-**Solution**:
-- Reduce total pixels on the bank
-- Redistribute pixels to other banks
-- Each bank has only one PSU connection, so 24A is a hard limit
-
-### "Exceeds PS capacity"
-**Cause**: Power supply too small for the load
-**Solution**:
-- Choose larger PSU model
-- Split banks across multiple PSUs
-- If RWU is OK (amber warning), current PSU may be adequate for typical use
-
-### High voltage drop warnings
-**Cause**: Wire too thin or too long for the current
-**Solution**:
-- Use thicker wire (lower AWG number)
-- Shorten wire runs if possible
-- Add power injection points
-
-### Voltage below minimum
-**Cause**: Total voltage drop brings voltage below minimum for pixel type
-**Solution**:
-- Reduce voltage drop (thicker wire, shorter runs)
-- Add power injection
-- Consider switching to regulated pixels (lower minimum voltage requirement)
-
-## Frequently Asked Questions
-
-### What's the difference between resistor and regulated pixels?
-- **Resistor pixels** use resistors for current limiting and need higher voltage (≥11.0V for 12V pixels) for consistent colors
-- **Regulated pixels** use onboard voltage regulators and can operate at lower voltages (~9.5V for 12V pixels), providing more voltage drop margin
-
-### Should I use 12V or 5V pixels?
-- **12V**: Better for longer runs, less voltage drop, easier power injection, more wire gauge flexibility
-- **5V**: Brighter pixels, tighter spacing, but more voltage drop concerns
-
-### What's a safe RWU factor?
-- **80%** is recommended for most installations
-- **60-70%** for displays with lots of color variation
-- **90-100%** only if you frequently use full white at max brightness
-
-### How many power supplies do I need?
-The calculator will tell you based on your configuration. Generally:
-- Each bank can connect to one PSU
-- PSUs should not exceed their rated capacity
-- Consider future expansion when sizing
-
-### What wire gauge should I use?
-Depends on current and distance. Use the calculator's recommendations:
-- Higher current or longer distance = thicker wire (lower AWG)
-- Don't exceed wire ampacity ratings
-- Check voltage drop warnings
-
-### Do I need power injection?
-Check the Power Injection Map table:
-- If voltage drops below minimum before end of string, you need injection
-- Generally recommended for strings >100 pixels
-- More injection points = better voltage stability
-
-### Why are there two warnings on my bank?
-Your bank can exceed both:
-1. **Port limit** (6A max per port) - individual port overload
-2. **Bank limit** (24A max per bank) - total bank overload
-
-Both need attention. The bank limit is particularly critical because each bank has only one PSU connection.
-
-### What does "RWU OK" mean?
-"RWU OK" means:
-- Theoretical calculation at full white/max brightness EXCEEDS the limit
-- Real-World Usage (with RWU factor applied) is within limits
-- This is an amber warning - proceed with caution
-- Ensure your RWU factor accurately reflects your actual usage
-
-### What does "RWU also over" mean?
-"RWU also over" means:
-- Even with the RWU factor applied, you still exceed limits
-- This is a red/danger warning
-- You MUST reduce pixel count or reconfigure
-- Not safe to proceed
-
-## Support and Resources
-
-- **NEC Standards**: [National Electrical Code](https://www.nfpa.org/NEC)
-- **MeanWell Power Supplies**: [MeanWell USA](https://www.meanwell-web.com/)
-- **Wire Ampacity Tables**: Based on NEC Table 310.15(B)(16)
-
-## Version History
-
-### Latest Version
-- Added Real-World Usage (RWU) factor for realistic power estimates
-- Improved bank and PSU status warnings with RWU awareness
-- Three-state warning system (danger/warn/ok)
-- Support for power injection-based PSU sizing
-- Per-port power analysis and injection mapping
-
-### Earlier Versions
-- Initial release with basic power calculations
-- Added controller support (K2, K4, K8, K16, K32, K40)
-- Added voltage drop analysis
-- Added AC circuit planning
-
-## License
-
-This project is provided as-is for use in planning LED pixel installations.
+**Live:** https://silvester13-sos.github.io/pixel-power-calculator/
 
 ---
 
-**Need Help?** Click the "Help" link in the header to return to this guide, or refer to the inline tooltips (ⓘ icons) throughout the calculator interface.
+## What's New in This Revision
+
+- **Verdict banner** at the top of every result — green / amber / red "does this design work" in plain English
+- **Review blocks** under the banner: critical issues, cautions, and "what you got right" wins
+- **Voltage-drop diagram** — inline SVG showing your actual DC chain (PSU → pigtail → extension → Pixel 1 → ... → Pixel N), with the injection branch when modelled
+- **"Model my actual injection setup"** — choose whether injection comes from the same PSU's spare V+/V- pair, a dedicated PSU of the same model, or a different PSU
+- **Real World Usage (RWU) slider on String Power** — see peak-white *and* realistic-show voltage drop side-by-side
+- **Save Build as PDF** button on every tab (one click, dated filename, no print-dialog)
+- **Beginner / Advanced Mode toggle** in the header — hides expert-only controls and shows only the fields most users need
+- **Inline "why this matters" hints** under each sidebar field
+- **4″ bullet-pixel spacing** is now the default on String Power (matches stock bullet-pixel harnesses)
+- **Save progress + Reset** — inputs persist in your browser between visits; a **Reset to Defaults** button on each tab clears both the fields and the saved state (also fixes the browser-autofill ghosts a few users hit)
+
+---
+
+## Three Planning Modes
+
+The tool has three top-level tabs. Pick whichever matches what you're planning.
+
+1. **String Power Needs** — a single prop / port / string. Fastest path to "how big a PSU and how thick a wire do I need?"
+2. **Controller Setup Power Needs** — multi-port, multi-bank controllers (Kulp K2 / K4 / K8 / K16 / K32 / K40, Falcon F16V5 / F48, Genius, Aldrick/Baldrick, QuinLED, generic). Allocates pixels to ports, ports to banks, banks to PSUs.
+3. **Megatree Planner** — mega-tree geometry → strand lengths → pixels per strand → power. Handles cone / cylinder / custom taper, 12 to 180+ strands, optional high-wind mode.
+
+All three tabs share the same results-layer features: verdict banner, review blocks, Save-as-PDF, Beginner Mode.
+
+---
+
+## Getting Started
+
+1. Open the calculator in your browser (link above).
+2. Pick a mode tab.
+3. Enter your pixel count and the sidebar fields — the blue ⓘ icons and the gray hint text under each field explain what each one does.
+4. Click **Calculate**.
+5. Read the verdict banner first. Then the critical / caution / wins blocks. Then the detail cards and tables.
+
+If you've used the tool before, the sidebar remembers your last values. Use the **Reset to Defaults** button under Calculate to start fresh.
+
+---
+
+## Mode 1: String Power Needs
+
+Use this for one prop, one port, one run of pixels.
+
+### Inputs — Pixel Setup
+
+- **Pixel Supply Voltage** — 12V (bullet pixels, most Christmas use) or 5V (strip / matrix). An optional *Custom voltage* field lets advanced users enter the actual loaded voltage of their PSU (e.g. 13.20V on a trimmed LRS-350-12).
+- **Pixel Construction** — *Resistor* (needs ≥11V for stable colour, most WS2811 bullet pixels) or *Regulated* (works down to ~9.5V on 12V, ~4.5V on 5V).
+- **Number of Pixels** — count on this one prop or port.
+- **Watts per Pixel at 100% White** — 0.6W is the WS2811 12V default (50 mA × 12V), 0.3W is the WS2812B 5V default.
+- **Pixel Density / Spacing** — defaults to **4″ bullet-pixel spacing (stock bullet harness)**. Also offers 30 px/m and 60 px/m strip densities, plus Custom.
+- **Brightness Level** — the max your show will actually run at. Most shows don't exceed 60–80%.
+- **Real World Usage (RWU) Factor** — slider 20–100%, default 45%. Christmas sequences with colour variety average 25–45% of peak-white draw. Results show peak and RWU side-by-side so you can plan against the honest number instead of the worst-case one.
+
+### Inputs — DC Wiring
+
+- **Include Controller Pigtail** — short wire (1–3 ft) from controller/PSU enclosure. Check the box, then pick gauge. **18 AWG is the largest commercially-available Christmas pigtail**; 22 AWG is available but advanced-only.
+- **Extension Wire Gauge + Length** — the main run from the controller/PSU to the first pixel. 12–14 AWG is typical for 10–30 ft runs.
+- **Injection Wire Gauge** — gauge for your mid-run injection taps (18 AWG is typical).
+- **Model my actual injection setup** (optional) — when on, lets you specify:
+  - Pixels before first injection
+  - Injection spacing (pixels between taps)
+  - Injection cable length per tap
+  - Injection power source: *Same PSU (spare V+/V- pair)*, *Dedicated PSU — same model*, or *Dedicated PSU — different model*
+  - Tool then models the initial-push segment amperage correctly instead of assuming pigtail carries the full strand.
+
+### Inputs — Power Supply, AC, Voltage Drop Graph
+
+- **Power Supply Model** — MeanWell LRS/ELG/etc., filtered to match selected voltage
+- **PS Derate Factor** — 80% (recommended), 90% (cool/ventilated), 100% (advanced, not recommended)
+- **AC Safety Factor** — 80% (NEC 210.20 compliant), 90% (advanced — exceeds NEC), 100% (advanced — non-compliant)
+- **AC Mains Voltage** — 120V (NA), 230V (Europe/UK/AU)
+- **Circuit Breaker Rating** — 15A standard, 20A for utility/kitchen
+- **Max Run Length to Graph** / **Min Acceptable Pixel Voltage** — bounds for the voltage-drop graph (advanced-only)
+
+### Results
+
+**Verdict Banner** — green "Design works," amber "works with cautions," or red "critical issues to fix" — plus a one-line sub-summary of your build.
+
+**Review Blocks** (plain English):
+- **Critical issues** — things you must fix before building
+- **Cautions** — things to review but not blockers
+- **What you got right** — wins, so you know what to keep
+
+**Summary Cards** — Total Pixels, DC Power Required, AC Power Draw, Power Supplies, 15A Circuits Required, DC Feed Chain (voltage at Pixel 1).
+
+**Voltage Drop Diagram** — inline SVG showing PSU → pigtail → extension → Pixel 1 → Pixel N with drop per segment at both peak and RWU. Dashed purple branch appears when injection is modelled.
+
+**Tables** — Power Supply Specifications, AC Circuit Distribution, Power Injection Plan, Voltage-Drop Graph, DC Wire Gauge Reference.
+
+---
+
+## Mode 2: Controller Setup Power Needs
+
+Use this when you're wiring a real controller with multiple ports and banks.
+
+### Supported Brands & Models
+Kulp (K2, K4, K8, K16, K32, K40 and A-series), Falcon (F16V5, F48, etc.), Genius, Aldrick / Baldrick, QuinLED, and a generic fallback.
+
+The tool reads each controller's spec from its definition: total ports, ports per bank, max amps per port (typically 6A), max amps per bank (typically 24A), and uses those as hard limits in the warnings.
+
+### Port Configuration Modes
+1. **Uniform** — same pixel count on every port
+2. **Per-Bank** — different per bank, uniform within each
+3. **Per-Port** — individual pixel count for each port
+
+### DC Wiring Options
+- **PSU → Controller pigtail** — gauge + length, optional
+- **Controller → Extension board** — gauge + length, optional (shows ampacity badge)
+- **Extension → First Pixel** — always required
+
+### Results
+
+Same verdict / cautions / wins framework at the top, plus:
+- **Per-Bank Power Breakdown** with per-port and per-bank limit checks, RWU-aware (amber if theoretical over but RWU OK, red if RWU also over)
+- **Power Injection Map** (per-port mode) — exact injection points with voltage at each tap
+- **PSU Allocation** — which PSUs feed which banks, with utilization %
+- **AC Circuit Distribution** following NEC 80% continuous-load rule
+
+---
+
+## Mode 3: Megatree Planner
+
+For planning a traditional mega-tree where strand length is derived from geometry.
+
+### Geometry Inputs
+- **Tree Height** (ft) and **Base Diameter** (ft)
+- **Tree Shape** — Cone (default), Cylinder, or Custom Taper (specify top diameter)
+- **Number of Strands** — presets from 12 (30° spacing) to 180 (2° spacing), or Custom
+- **High Wind Mode** — turns on wind-speed input and emits structural recommendations for 20–50+ mph zones
+
+### Pixel & Power Inputs
+Same voltage, construction, watts, brightness, RWU controls as Mode 1, plus:
+- **Pixels per Strand** — Uniform, or Auto-Calculate from seed-pixel spacing (2 cm ultra-dense → 10 cm sparse, or Custom)
+- **Strand Slack / Connector Allowance** — 6" to 24" per strand for tension + connectors
+- **Strand Feed Wire Gauge** — 12 AWG to 20 AWG (18 AWG typical for strand feeds)
+
+### Results
+Tree geometry summary, per-strand pixel counts and lengths, strand feed voltage drop, PSU count, AC circuit plan, and a visual representation of the tree.
+
+---
+
+## Shared UX Features
+
+### Beginner Mode
+Click the **Beginner Mode** pill in the header. The page hides advanced-only controls (custom voltage, 22 AWG pigtail, 100% PS derate, 90%/100% AC safety overrides, custom spacing, voltage-drop graph bounds, etc.) and shows a short banner explaining what's been simplified. Click again to return to Advanced Mode.
+
+The tool opens in Advanced Mode by default. Beginner Mode is one click away for anyone who wants a cleaner view.
+
+### Save Build as PDF
+Every tab has a **Save Build as PDF** button at the top-right of the results. One click → dated PDF with everything (verdict, cards, tables, diagram). No print dialog, no cropping.
+
+### Save Progress + Reset to Defaults
+Your sidebar inputs auto-save to the browser's local storage as you change them, so closing and reopening the tab restores your build. Use the **Reset to Defaults** button under Calculate to clear that saved state and return to factory defaults.
+
+This also turns off the browser's built-in form autofill — if you previously saw "stale" values that survived cookie clears or private windows, that's why. Reset (or clear browser form-data once) and the ghosts go away.
+
+### Inline Field Hints
+Every important sidebar field has a short gray hint underneath explaining what it means in plain English. The old ⓘ info buttons still open full tooltips with deeper detail.
+
+---
+
+## Technical Details
+
+### Voltage Drop Formula
+```
+V_drop = I × R × 2 × L
+```
+Where *I* = amps, *R* = Ω/ft for the chosen gauge, *L* = feet, and the factor of 2 is round-trip (V+ and V- conductors).
+
+### Wire Ampacity
+NEC Table 310.15(B)(16), PVC insulation, 60°C, open-air copper. CCA (copper-clad aluminum) ratings also shown in the reference table — CCA has higher resistance and lower ampacity, use CU for critical runs.
+
+### PSU Efficiency
+MeanWell AC-input draw is computed as `DC_load / efficiency` (typically 88–92% depending on model and load).
+
+### Real World Usage (RWU)
+Christmas sequences with colour variety typically draw **25–45%** of theoretical peak-white. Static-white or video-playback sequences sit closer to 60–80%. The tool shows both peak (for safety planning and wire sizing) and RWU (for realistic PSU counts and voltage-at-pixel) so you don't over-build to a worst case that never happens on the lawn.
+
+---
+
+## Troubleshooting
+
+**"Pigtail overloaded"** — 18 AWG is the largest commercially-available Christmas pigtail. If peak amperage exceeds 7A, you can't just upsize the pigtail. Shorten what this port drives, inject sooner, or split across multiple ports.
+
+**"Extension wire overloaded"** — upsize the extension gauge (lower AWG number), reduce pixels on this run, or move injection closer to Pixel 1.
+
+**"Bank EXCEEDS 24A limit"** — each bank has exactly one PSU connection; 24A is a hard limit. Redistribute pixels to other banks or reduce count.
+
+**"Port EXCEEDS 6A limit"** — move pixels to another port on the same bank, or inject sooner.
+
+**"Exceeds PS capacity"** — choose a larger MeanWell model, split the bank across two PSUs, or (if RWU is OK, amber warning) accept the risk if you're confident in the RWU factor.
+
+**Voltage below minimum at Pixel 1** — your DC feed chain is losing too much voltage before the string. Upsize extension gauge, shorten the run, or add injection.
+
+**Browser seems to remember old values** — click **Reset to Defaults** under Calculate. The tool now turns off browser form-autofill, but any leftovers from before this update will clear with Reset.
+
+---
+
+## FAQ
+
+**Resistor vs regulated pixels?** Resistor needs ≥11V (12V) / ≥4.5V (5V) for stable colour; regulated works down to ~9.5V (12V) / ~4.5V (5V) and gives you more voltage-drop headroom.
+
+**12V or 5V?** 12V for anything long (less drop, thinner wire gets away with more). 5V for dense strips and matrices.
+
+**What's a safe RWU factor?** 45% (default) for typical colour-sequencing shows. Bump to 60–80% for static-white or video-playback. Drop to 25–35% only if you're confident your sequences never sustain high draw.
+
+**Do I need injection?** Check the voltage at Pixel 1 and the "Remaining for strip injection" line. If that's going negative, yes. Generally anything over ~100 pixels benefits from at least one tap.
+
+**What does "RWU OK" mean?** Theoretical peak-white exceeds a limit but realistic show load is fine. Amber warning — proceed if you trust your RWU factor matches your actual sequences.
+
+**What does "RWU also over" mean?** Even the realistic load exceeds the limit. Red warning — must fix.
+
+---
+
+## Version History
+
+### Current (2025 Christmas prep revision)
+- 4-inch bullet-pixel spacing added as String Power default
+- Browser autofill disabled; opt-in localStorage cache + Reset to Defaults button
+- Save Build as PDF (jsPDF + html2canvas, CDN-loaded) on every tab
+- Voltage-drop SVG diagram on String Power
+- Beginner / Advanced mode toggle in header
+- Inline "why this matters" field hints across sidebar
+- Verdict banner + critical / cautions / wins review blocks
+- "Model my actual injection setup" with Same PSU / Dedicated same / Dedicated different source choice
+- Real World Usage (RWU) slider on String Power (20–100%, default 45%), with peak + RWU shown side-by-side
+
+### Earlier
+- Megatree Planner mode (geometry → strands → power)
+- Controller Setup mode with per-bank, per-port, and uniform port configuration
+- RWU-aware three-state warning system (danger / warn / ok)
+- Multi-brand controller support (Kulp, Falcon, Genius, Aldrick/Baldrick, QuinLED)
+- Voltage drop analysis, AC circuit distribution, injection mapping
+- Initial release with basic string power and PSU sizing
+
+---
+
+## License
+
+Provided as-is for planning Christmas / event LED pixel installations. Not a substitute for an electrician on anything that connects to mains or runs continuously at high load.
+
+---
+
+**Need help?** The **Help** link in the header returns to this guide. Inline ⓘ icons throughout the UI open deeper tooltips for each field. Feedback and bug reports: open an issue on the GitHub repo.
