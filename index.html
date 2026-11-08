@@ -238,6 +238,43 @@
   }
   .result-section-body { padding: 16px 18px; }
 
+  /* Field inline hints (Batch B: #5 — plain-English one-liners under inputs) */
+  .field-hint {
+    font-size: .7rem;
+    color: var(--muted);
+    margin-top: 4px;
+    line-height: 1.5;
+    padding-left: 2px;
+  }
+  .field-hint strong { color: var(--text); font-weight: 600; }
+
+  /* Beginner mode toggle (Batch B: #4) */
+  .mode-toggle {
+    display:inline-flex; align-items:center; gap:8px;
+    padding:6px 12px; border-radius:16px;
+    background: var(--panel2); border:1px solid var(--border);
+    font-size:.78rem; cursor:pointer; user-select:none;
+    color: var(--muted);
+    transition: all .15s ease;
+  }
+  .mode-toggle:hover { border-color: var(--accent); color: var(--text); }
+  .mode-toggle .mode-dot {
+    width:8px; height:8px; border-radius:50%;
+    background: var(--muted);
+  }
+  body.beginner-mode .mode-toggle { border-color: var(--ok); color: var(--ok); }
+  body.beginner-mode .mode-toggle .mode-dot { background: var(--ok); }
+  body.beginner-mode .advanced-only { display: none !important; }
+  body.beginner-mode .beginner-banner { display: block !important; }
+  .beginner-banner {
+    display:none;
+    padding:10px 14px; margin:0 0 14px;
+    border-radius:8px;
+    background: rgba(34,197,94,.08);
+    border:1px solid rgba(34,197,94,.3);
+    font-size:.8rem; line-height:1.55; color: var(--text);
+  }
+
   /* Verdict banner + review blocks (Batch A: #1 verdict, #3 wins, #8 edge cases) */
   .verdict-row {
     display:flex; align-items:center; gap:14px;
@@ -352,10 +389,20 @@
     <p>MeanWell power supplies &bull; NEC wire sizing &bull; AC circuit planning</p>
   </div>
   <div class="spacer"></div>
+  <div class="mode-toggle" id="modeToggle" onclick="toggleBeginnerMode()" title="Toggle Beginner Mode — hides advanced controls, shows plain-English hints">
+    <span class="mode-dot"></span>
+    <span id="modeToggleLabel">Beginner Mode</span>
+  </div>
   <a href="https://github.com/Silvester13-SOS/pixel-power-calculator/blob/main/README.md" target="_blank" class="help-link">
     <span>&#10068;</span> Help
   </a>
 </header>
+
+<!-- ── Beginner banner (shown only when beginner mode is on) ────────────── -->
+<div class="beginner-banner" id="beginnerBanner">
+  <strong>Beginner Mode:</strong> advanced inputs (custom voltage, 90/100% AC override, graph tuning, 22 AWG pigtail, min-voltage threshold) are hidden to keep things simple.
+  Every remaining input has a short plain-English hint under it. Click the toggle again any time to return to Advanced Mode and see everything.
+</div>
 
 <!-- ── Mode selector ────────────────────────────────────────────────────── -->
 <div class="mode-bar">
@@ -404,7 +451,8 @@
           5V
         </label>
       </div>
-      <div style="display:flex; align-items:center; gap:8px; margin-top:8px; padding:8px 10px;
+      <div class="field-hint"><strong>12V</strong> is the standard for Christmas pixels. <strong>5V</strong> is for short strips/matrices (e.g. P10, pixel matrix panels).</div>
+      <div class="advanced-only" style="display:flex; align-items:center; gap:8px; margin-top:8px; padding:8px 10px;
         background:var(--panel2); border:1px solid var(--border); border-radius:7px;">
         <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-size:.82rem; color:var(--muted); white-space:nowrap;">
           <input type="checkbox" id="voltCustomEnable" onchange="onVoltageChange()" style="accent-color:var(--accent);">
@@ -444,9 +492,10 @@
     <div class="field">
       <label>Number of Pixels <button class="info-btn" onclick="toggleTip(this,'numPixels')">i</button></label>
       <input type="number" id="numPixels" value="500" min="1" max="100000">
+      <div class="field-hint">Count all pixels in <strong>this one prop or port</strong>. Model each prop separately.</div>
     </div>
 
-    <div class="field">
+    <div class="field advanced-only">
       <label>Watts per Pixel at 100% White <button class="info-btn" onclick="toggleTip(this,'wattsPerPixel')">i</button></label>
       <input type="number" id="wattsPerPixel" value="0.60" min="0.01" max="5" step="0.01">
       <div id="wppNote" style="margin-top:5px; padding:6px 9px; background:rgba(79,142,247,.07);
@@ -462,11 +511,12 @@
       <select id="density">
         <option value="30">30 px/m — 3.3 cm (1.3 in) spacing</option>
         <option value="60" selected>60 px/m — 1.65 cm (0.65 in) spacing</option>
-        <option value="custom">Custom — enter spacing in inches</option>
+        <option value="custom" class="advanced-only">Custom — enter spacing in inches</option>
       </select>
+      <div class="field-hint">How close together your pixels are on the wire or strip. Bullet-pixel harnesses are typically <strong>2 in (5 cm)</strong>.</div>
     </div>
 
-    <div class="field" id="customSpacingField" style="display:none">
+    <div class="field advanced-only" id="customSpacingField" style="display:none">
       <label>Custom Pixel Spacing (inches) <button class="info-btn" onclick="toggleTip(this,'customSpacing')">i</button></label>
       <input type="number" id="customSpacing" value="2" min="0.1" step="0.1">
     </div>
@@ -477,6 +527,7 @@
         <input type="range" id="brightness" min="1" max="100" value="100">
         <div class="slider-val" id="brightnessVal">100%</div>
       </div>
+      <div class="field-hint">The <strong>max brightness</strong> your show will actually run at. Most shows don't exceed 60&ndash;80%.</div>
     </div>
 
     <div class="field">
@@ -506,6 +557,7 @@
         <span style="color:var(--text); font-weight:600;">Include Controller Pigtail</span>
         <button class="info-btn" onclick="toggleTip(this,'pigtailEnabled')">i</button>
       </label>
+      <div class="field-hint">A short wire (1&ndash;3 ft) exiting the controller or PSU enclosure. Turn on only if you have one.</div>
     </div>
 
     <!-- Pigtail details (shown when checked) -->
@@ -519,8 +571,9 @@
           <option value="16">16 AWG (13A)</option>
           <option value="18" selected>18 AWG (7A) — typical short pigtail</option>
           <option value="20">20 AWG (5A)</option>
-          <option value="22">22 AWG (3A) — common on small pre-made pigtails</option>
+          <option value="22" class="advanced-only">22 AWG (3A) — common on small pre-made pigtails</option>
         </select>
+        <div class="field-hint"><strong>18 AWG</strong> is the largest commercially-available Christmas-pigtail size. Match this to what you're actually buying.</div>
       </div>
       <div class="field" style="margin-bottom:0;">
         <label>Pigtail Length (feet) <button class="info-btn" onclick="toggleTip(this,'pigtailLen')">i</button></label>
@@ -538,11 +591,13 @@
         <option value="16">16 AWG (13A)</option>
         <option value="18">18 AWG (7A) — short runs only</option>
       </select>
+      <div class="field-hint">Longer runs need heavier (<em>lower AWG number</em>) wire. <strong>12&ndash;14 AWG</strong> is typical for 10&ndash;30 ft runs.</div>
     </div>
 
     <div class="field">
       <label>Extension Wire Length (feet) <button class="info-btn" onclick="toggleTip(this,'extensionLen')">i</button></label>
       <input type="number" id="extensionLen" value="10" min="0" step="1">
+      <div class="field-hint">Total feet from the PSU/controller to the first pixel. Measure the actual run, not straight-line.</div>
     </div>
 
     <!-- Injection wire -->
@@ -611,6 +666,7 @@
       <select id="psModel">
         <!-- populated dynamically by onVoltageChange() -->
       </select>
+      <div class="field-hint">MeanWell LRS-series is the industry-standard pick for pixel shows.</div>
     </div>
 
     <div class="field">
@@ -618,8 +674,9 @@
       <select id="psDerate">
         <option value="0.8" selected>80% — recommended</option>
         <option value="0.9">90% — cool / ventilated location</option>
-        <option value="1.0">100% — not recommended</option>
+        <option value="1.0" class="advanced-only">100% — not recommended</option>
       </select>
+      <div class="field-hint"><strong>80%</strong> gives the supply room to breathe — runs cooler, lasts longer.</div>
     </div>
 
     <div class="section-label">AC Circuit Settings</div>
@@ -630,10 +687,11 @@
         <option value="0.8" selected>80% — NEC 210.20 compliant</option>
         <option value="0.75">75% — conservative</option>
         <option value="0.5">50% — very conservative</option>
-        <option value="0.9">90% — &#9888; EXCEEDS NEC (expert override)</option>
-        <option value="1.0">100% — &#9888;&#9888; DANGER (non-compliant)</option>
+        <option value="0.9" class="advanced-only">90% — &#9888; EXCEEDS NEC (expert override)</option>
+        <option value="1.0" class="advanced-only">100% — &#9888;&#9888; DANGER (non-compliant)</option>
       </select>
       <div id="acSafetyWarn" style="display:none; margin-top:8px;"></div>
+      <div class="field-hint"><strong>80%</strong> is the NEC code requirement for continuous (3+ hour) loads &mdash; Christmas shows count.</div>
     </div>
 
     <div class="field">
@@ -642,6 +700,7 @@
         <option value="120" selected>120V — North America</option>
         <option value="240">240V — Europe / UK / AU</option>
       </select>
+      <div class="field-hint">What your wall outlet gives you. <strong>120V</strong> in US/Canada; <strong>230V</strong> most everywhere else.</div>
     </div>
 
     <div class="field">
@@ -650,16 +709,17 @@
         <option value="15" selected>15A — standard US household</option>
         <option value="20">20A — kitchen / utility circuit</option>
       </select>
+      <div class="field-hint">Check your breaker panel. Most household outlets are <strong>15A</strong>; kitchens, garages, and utility rooms are often <strong>20A</strong>.</div>
     </div>
 
-    <div class="section-label">Voltage Drop Graph</div>
+    <div class="section-label advanced-only">Voltage Drop Graph</div>
 
-    <div class="field">
+    <div class="field advanced-only">
       <label>Max Run Length to Graph (ft) <button class="info-btn" onclick="toggleTip(this,'maxRunFeet')">i</button></label>
       <input type="number" id="maxRunFeet" value="100" min="10" max="1000">
     </div>
 
-    <div class="field">
+    <div class="field advanced-only">
       <label>Min Acceptable Pixel Voltage (V) <button class="info-btn" onclick="toggleTip(this,'minVoltage')">i</button></label>
       <input type="number" id="minVoltage" value="11.0" min="1" max="15" step="0.1">
       <div id="minVNote" style="margin-top:4px; font-size:0.72rem; color:var(--muted);">
@@ -1558,6 +1618,15 @@ function onVoltageChange() {
 
 function v(id) { return document.getElementById(id).value; }
 function vn(id) { return parseFloat(document.getElementById(id).value); }
+
+// ── Beginner / Advanced mode toggle (Batch B: #4) ────────────────────────
+function toggleBeginnerMode() {
+  const body = document.body;
+  const label = document.getElementById('modeToggleLabel');
+  body.classList.toggle('beginner-mode');
+  const now = body.classList.contains('beginner-mode');
+  label.textContent = now ? 'Advanced Mode' : 'Beginner Mode';
+}
 
 // ── Injection modeling toggle + source handlers ──────────────────────────
 function onInjModelToggle() {
