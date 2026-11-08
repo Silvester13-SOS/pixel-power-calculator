@@ -597,23 +597,31 @@
         <input type="range" id="brightness" min="1" max="100" value="100">
         <div class="slider-val" id="brightnessVal">100%</div>
       </div>
-      <div class="field-hint">The <strong>max brightness</strong> your show will actually run at. Most shows don't exceed 60&ndash;80%.</div>
+      <div class="field-hint">
+        The <strong>output cap</strong> your show runs at &mdash; i.e. xLights <em>Max Brightness</em> or the equivalent in your sequencer.
+        This is the <em>ceiling</em> if a sustained all-white scene ever fires. Most shows cap at 60&ndash;80%.
+        <strong>RWU below</strong> handles the "how much of that cap do I actually average" question.
+      </div>
     </div>
 
     <div class="field">
       <label>Real World Usage (RWU) Factor <button class="info-btn" onclick="toggleTip(this,'rwuFactor')">i</button>
-        <span style="font-size:.72rem; color:var(--muted); font-weight:400;">(typical show load vs rated peak)</span>
+        <span style="font-size:.72rem; color:var(--muted); font-weight:400;">(average draw vs your brightness cap)</span>
       </label>
       <div class="slider-wrap">
-        <input type="range" id="rwuFactor" min="20" max="100" value="45"
+        <input type="range" id="rwuFactor" min="25" max="100" value="45"
           oninput="document.getElementById('rwuFactorVal').textContent=this.value+'%'">
         <div class="slider-val" id="rwuFactorVal">45%</div>
       </div>
       <div style="font-size:.72rem; color:var(--muted); margin-top:5px; line-height:1.55;
         padding:5px 8px; background:rgba(79,142,247,.05); border-radius:5px;">
-        A sequenced Christmas show with color variety typically averages
-        <strong style="color:var(--text)">25&ndash;45%</strong> of theoretical 100% white draw.
-        Static-white or video-playback sequences land closer to <strong style="color:var(--text)">60&ndash;80%</strong>.
+        <strong>Think of it this way:</strong><br>
+        &bull; <strong>Brightness</strong> = the <em>cap</em> your show is allowed to hit.<br>
+        &bull; <strong>RWU</strong> = what fraction of that cap your sequences <em>actually average</em>.<br><br>
+        Colourful xLights animation typically averages
+        <strong style="color:var(--text)">25&ndash;45%</strong> because pixels cycle through single colours instead of
+        holding solid white. Static-white or pixel-mapped video sits at
+        <strong style="color:var(--text)">60&ndash;80%</strong>. All-white test pattern = 100%.<br>
         Results show both <em>peak</em> (safety-planning) and <em>RWU</em> (realistic) voltage drop.
       </div>
     </div>
@@ -901,22 +909,29 @@
           oninput="document.getElementById('ctrlBrightnessVal').textContent=this.value+'%'">
         <div class="slider-val" id="ctrlBrightnessVal">100%</div>
       </div>
+      <div class="field-hint">
+        Your show's <strong>output cap</strong> (xLights Max Brightness). Shown as a reference column in results.
+        Safety sizing uses <strong>100% white worst case</strong> regardless of this slider &mdash; a stuck effect or test pattern
+        has to be survivable.
+      </div>
     </div>
 
     <div class="field">
       <label>Real World Usage (RWU) Factor
-        <span style="font-size:.72rem; color:var(--muted); font-weight:400;">(actual vs rated draw)</span>
+        <span style="font-size:.72rem; color:var(--muted); font-weight:400;">(average draw vs your brightness cap)</span>
       </label>
       <div class="slider-wrap">
-        <input type="range" id="ctrlRwuFactor" min="45" max="100" value="80"
+        <input type="range" id="ctrlRwuFactor" min="25" max="100" value="45"
           oninput="document.getElementById('ctrlRwuFactorVal').textContent=this.value+'%'">
-        <div class="slider-val" id="ctrlRwuFactorVal">80%</div>
+        <div class="slider-val" id="ctrlRwuFactorVal">45%</div>
       </div>
       <div style="font-size:.72rem; color:var(--muted); margin-top:5px; line-height:1.55;
         padding:5px 8px; background:rgba(79,142,247,.05); border-radius:5px;">
-        WS2811 at 100% white typically draws <strong style="color:var(--text)">70–85%</strong>
-        of theoretical max. 80% &#8776; <strong style="color:var(--text)">4A per 100 px</strong>
-        at 12V. RWU figures are shown as guidance only &mdash; all safety calcs stay at theoretical.
+        <strong>Brightness</strong> = the <em>cap</em> &middot; <strong>RWU</strong> = fraction of that cap your show <em>averages</em>.<br>
+        &bull; <strong>25&ndash;45%</strong> &mdash; colourful xLights animation (typical Christmas show)<br>
+        &bull; <strong>45&ndash;60%</strong> &mdash; mixed with some bright-white chases<br>
+        &bull; <strong>60&ndash;80%</strong> &mdash; heavy white / pixel-mapped video<br>
+        Reference column only &mdash; all safety-critical sizing is at 100% white worst case.
       </div>
     </div>
 
@@ -1350,14 +1365,24 @@
           oninput="document.getElementById('mtBrightnessVal').textContent=this.value+'%'">
         <div class="slider-val" id="mtBrightnessVal">100%</div>
       </div>
+      <div class="field-hint">
+        Your show's <strong>output cap</strong> (xLights Max Brightness). Most shows cap at 60&ndash;80%.
+      </div>
     </div>
 
     <div class="field">
-      <label>Real World Usage (RWU) Factor</label>
+      <label>Real World Usage (RWU) Factor
+        <span style="font-size:.72rem; color:var(--muted); font-weight:400;">(average draw vs your brightness cap)</span>
+      </label>
       <div class="slider-wrap">
-        <input type="range" id="mtRwuFactor" min="45" max="100" value="80"
+        <input type="range" id="mtRwuFactor" min="25" max="100" value="45"
           oninput="document.getElementById('mtRwuFactorVal').textContent=this.value+'%'">
-        <div class="slider-val" id="mtRwuFactorVal">80%</div>
+        <div class="slider-val" id="mtRwuFactorVal">45%</div>
+      </div>
+      <div class="field-hint">
+        <strong>Brightness</strong> = cap &middot; <strong>RWU</strong> = fraction of that cap your show averages.
+        Colourful xLights animation typically averages <strong>25&ndash;45%</strong>; heavy white content sits at
+        <strong>60&ndash;80%</strong>.
       </div>
     </div>
 
@@ -2914,31 +2939,59 @@ const TIPS = {
   brightness: {
     title: 'Brightness Level',
     body: `<div class="tip-section">
-      <div class="tip-section-head">What this does</div>
-      Scales all power and current calculations. 100% = every pixel at maximum white (all 3 color channels fully on) — the absolute worst case draw.
+      <div class="tip-section-head">What this is</div>
+      Brightness is the <strong>output cap</strong> your show is allowed to hit &mdash; the same number
+      you set as "Max Brightness" in xLights (or equivalent in your sequencer).
+      At 100% the pixel can drive every channel fully on. At 60% the sequencer clamps every channel at 60% of full.
+    </div>
+    <div class="tip-section">
+      <div class="tip-section-head">How to use it with RWU</div>
+      Two sliders, two different jobs:<br>
+      &bull; <strong>Brightness</strong> = how hard you've told the show it's <em>allowed</em> to drive (the ceiling).<br>
+      &bull; <strong>RWU</strong> = what fraction of that ceiling your sequences <em>average</em> in practice.<br><br>
+      Example: a show capped at <strong>80% brightness</strong> running colourful animation (<strong>40% RWU</strong>)
+      averages <strong>80% &times; 40% = 32%</strong> of theoretical peak. But the hardware still has to survive
+      the 80% ceiling if a stuck effect or all-white test pattern hits it.
     </div>
     <div class="tip-section">
       <div class="tip-section-head">What to set it to</div>
       Set it to the <strong>maximum brightness your show will actually run at.</strong><br>
-      &bull; Real-world colorful animation: typically <strong>30–60%</strong> average.<br>
-      &bull; Full white scenes / chases: closer to <strong>80–100%</strong>.<br>
-      &bull; Power and current scale linearly: 50% brightness ≈ 50% power.<br>
-      <strong style="color:#f59e0b;">Size your wiring for the brightness you plan to run.</strong>
+      &bull; Colourful animations: 60&ndash;80% is typical.<br>
+      &bull; Static-white or video-playback: closer to 80&ndash;100%.<br>
+      &bull; Power and current scale linearly: 50% brightness &#8776; 50% power.
+    </div>
+    <div class="tip-section">
+      <div class="tip-section-head">Safety note</div>
+      On the <strong>Controller Setup</strong> tab, safety-critical sizing (PSU count, port/bank ampacity, fuse checks,
+      injection decision) uses <strong>100% white worst case</strong> regardless of this slider &mdash; because a stuck
+      effect or test pattern can hit full output and your hardware has to survive it. The brightness slider shows as a
+      reference column, not as a safety driver.
     </div>`
   },
   rwuFactor: {
     title: 'Real World Usage (RWU) Factor',
     body: `<div class="tip-section">
       <div class="tip-section-head">What this is</div>
-      RWU is the <strong>typical fraction of peak-white current</strong> a sequence actually draws.
-      Pixels only hit 100% white when all three colour channels are fully on at the same time.
-      Christmas shows run colour sequences, so average draw is dramatically lower than the nameplate worst case.
+      RWU is <strong>what fraction of your brightness cap your sequences actually average</strong>.
+      Pixels only hit full output on a given channel when that channel is fully on, and a colour sequence
+      is constantly cycling &mdash; so even at 100% brightness cap, a colourful animation might only
+      average 30&ndash;40% of peak-white current.
+    </div>
+    <div class="tip-section">
+      <div class="tip-section-head">How Brightness and RWU work together</div>
+      Two different scalars, stacked:<br>
+      &bull; <strong>Brightness</strong> = the ceiling (how hard the show is <em>allowed</em> to drive).<br>
+      &bull; <strong>RWU</strong> = what fraction of that ceiling your sequences <em>typically average</em>.<br><br>
+      Example: 100% brightness &times; 40% RWU = draws average 40% of peak white.<br>
+      Example: 80% brightness &times; 50% RWU = draws average 40% of peak white (same number, different path).<br><br>
+      A sustained all-white moment inside a show at 80% brightness still hits 80% of peak (not 40%),
+      which is why wire/PSU sizing uses the ceiling not the average.
     </div>
     <div class="tip-section">
       <div class="tip-section-head">What to set it to</div>
-      &bull; <strong>25–45%</strong> &mdash; colourful animated xLights sequences (typical Christmas show).<br>
-      &bull; <strong>45–60%</strong> &mdash; mixed shows with some bright-white chases.<br>
-      &bull; <strong>60–80%</strong> &mdash; heavy white content, pixel-mapped video, sustained bright scenes.<br>
+      &bull; <strong>25&ndash;45%</strong> &mdash; colourful animated xLights sequences (typical Christmas show).<br>
+      &bull; <strong>45&ndash;60%</strong> &mdash; mixed shows with some bright-white chases.<br>
+      &bull; <strong>60&ndash;80%</strong> &mdash; heavy white content, pixel-mapped video, sustained bright scenes.<br>
       &bull; <strong>100%</strong> &mdash; worst-case test pattern / static all-white.
     </div>
     <div class="tip-section">

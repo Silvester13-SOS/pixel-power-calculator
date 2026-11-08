@@ -10,6 +10,8 @@ A web-based planning tool for Christmas pixel installations: power sizing, volta
 
 - **Controller Setup safety overhaul** — the brightness slider no longer cascades into PSU count, ampacity checks, injection decision, or fuse checks. All safety-critical numbers are now sized for **100% white worst case**, with your show setting and RWU shown as parallel reference columns. See the Mode 2 section for details.
 - **String Wire Gauge input** on Controller Setup — defaults to 22 AWG (stock bullet pigtails). Drives along-string voltage drop and the real injection decision.
+- **Clearer Brightness vs RWU copy** across all three tabs — explicit worked examples (e.g. 80% brightness × 40% RWU = 32% average) and inline cross-references so users stop asking which one does what.
+- **RWU slider minimum = 25%** on all tabs (was 20% on String, 45% on Controller / Megatree). Honest range for a colourful xLights show.
 - **Hard-fail badges with inline remediation** on Controller Setup — ampacity or fuse violations show "FAIL — upsize to N AWG" instead of a tucked-away warning.
 - **Build Interpretation advisory block** on Controller Setup — plain-English "what a typical build at this scale would plan for" instead of a pass/fail verdict.
 - **Verdict banner** at the top of String Power results — green / amber / red "does this design work" in plain English
@@ -60,8 +62,12 @@ Use this for one prop, one port, one run of pixels.
 - **Number of Pixels** — count on this one prop or port.
 - **Watts per Pixel at 100% White** — 0.6W is the WS2811 12V default (50 mA × 12V), 0.3W is the WS2812B 5V default.
 - **Pixel Density / Spacing** — defaults to **4″ bullet-pixel spacing (stock bullet harness)**. Also offers 30 px/m and 60 px/m strip densities, plus Custom.
-- **Brightness Level** — the max your show will actually run at. Most shows don't exceed 60–80%.
-- **Real World Usage (RWU) Factor** — slider 20–100%, default 45%. Christmas sequences with colour variety average 25–45% of peak-white draw. Results show peak and RWU side-by-side so you can plan against the honest number instead of the worst-case one.
+- **Brightness Level** — the **output cap** your show runs at (xLights "Max Brightness" or equivalent). This is the ceiling if a sustained all-white scene ever fires. Most shows cap at 60–80%.
+- **Real World Usage (RWU) Factor** — slider 25–100%, default 45%. What fraction of that brightness cap your sequences *actually average*. Colourful xLights animation typically averages 25–45% because pixels cycle through single colours instead of holding solid white. Static-white or video-playback sits at 60–80%.
+
+**How Brightness and RWU work together:** Brightness is the ceiling; RWU is the average draw against that ceiling.
+
+> 80% brightness × 40% RWU = sequences average 32% of theoretical peak. But a stuck effect or all-white test pattern at that config still hits 80% of peak, which is why safety sizing uses the ceiling not the average.
 
 ### Inputs — DC Wiring
 
@@ -213,7 +219,13 @@ NEC Table 310.15(B)(16), PVC insulation, 60°C, open-air copper. CCA (copper-cla
 MeanWell AC-input draw is computed as `DC_load / efficiency` (typically 88–92% depending on model and load).
 
 ### Real World Usage (RWU)
-Christmas sequences with colour variety typically draw **25–45%** of theoretical peak-white. Static-white or video-playback sequences sit closer to 60–80%. The tool shows both peak (for safety planning and wire sizing) and RWU (for realistic PSU counts and voltage-at-pixel) so you don't over-build to a worst case that never happens on the lawn.
+Christmas sequences with colour variety typically average **25–45%** of theoretical peak-white. Static-white or video-playback sequences sit closer to 60–80%. The tool shows both peak (for safety planning and wire sizing) and RWU (for realistic PSU counts and voltage-at-pixel) so you don't over-build to a worst case that never happens on the lawn.
+
+**Brightness vs RWU** — these are two different scalars and they stack:
+- **Brightness** = the max output your show is *allowed* to hit (the ceiling, set in your sequencer)
+- **RWU** = what fraction of that ceiling your sequences *actually average*
+
+A show capped at 80% brightness running colourful animation at 40% RWU averages 80% × 40% = 32% of peak-white draw. But if a stuck effect or test pattern fires, the hardware will see 80% of peak, not 32%. That's why safety sizing on the Controller Setup tab uses 100% white worst case regardless of either slider — survivable hardware has to be survivable.
 
 ---
 
@@ -247,7 +259,9 @@ Christmas sequences with colour variety typically draw **25–45%** of theoretic
 
 **12V or 5V?** 12V for anything long (less drop, thinner wire gets away with more). 5V for dense strips and matrices.
 
-**What's a safe RWU factor?** 45% (default) for typical colour-sequencing shows. Bump to 60–80% for static-white or video-playback. Drop to 25–35% only if you're confident your sequences never sustain high draw.
+**What's a safe RWU factor?** 45% (default) for typical colour-sequencing shows. Bump to 60–80% for static-white or video-playback. Drop to 25–35% only if you're confident your sequences never sustain high draw. Slider min is now 25% on all three tabs.
+
+**What's the difference between Brightness and RWU?** Brightness is the *cap* your sequencer enforces — it's the ceiling. RWU is *what fraction of that ceiling your show actually averages* in practice. They stack multiplicatively (80% brightness × 40% RWU → average 32% of peak). Safety sizing uses the ceiling because a stuck effect or test pattern can push the hardware to the ceiling at any time.
 
 **Do I need injection?** Check the voltage at Pixel 1 and the "Remaining for strip injection" line. If that's going negative, yes. Generally anything over ~100 pixels benefits from at least one tap.
 
@@ -261,6 +275,7 @@ Christmas sequences with colour variety typically draw **25–45%** of theoretic
 
 ### Current (2025 Christmas prep revision)
 - **Controller Setup safety overhaul** — brightness decoupled from PSU count, ampacity, injection decision, and fuse checks; everything safety-critical sized for 100% white worst case with show / RWU shown as parallel reference columns
+- RWU slider minimum lowered to **25%** on all three tabs (from 20% on String Power, 45% on Controller / Megatree) with clearer brightness-vs-RWU copy and worked examples
 - **String Wire Gauge input** on Controller Setup (default 22 AWG) driving the real along-string drop and injection distance
 - **Hard-fail badges with inline remediation** on Controller Setup (ampacity / fuse violations show "FAIL — upsize to N AWG" instead of being buried in a warning chip)
 - **Build Interpretation advisory block** on Controller Setup replacing the old green/amber injection-needed chip
