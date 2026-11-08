@@ -525,6 +525,53 @@
       </select>
     </div>
 
+    <!-- ── Model my actual injection setup ─────────────────────────────── -->
+    <div class="field" style="padding:10px 12px; background:rgba(79,142,247,.04); border:1px solid rgba(79,142,247,.15); border-radius:6px;">
+      <label style="display:flex; align-items:center; gap:8px; font-weight:600;">
+        <input type="checkbox" id="injModelEnabled" onchange="onInjModelToggle()" style="margin:0;">
+        Model my actual injection setup
+        <button class="info-btn" onclick="toggleTip(this,'injModelEnabled')">i</button>
+      </label>
+      <div style="font-size:.72rem; color:var(--muted); margin-top:4px; line-height:1.55;">
+        When off, the tool assumes the pigtail/extension carries the full strand's current (single-port, no injection).
+        Turn on to model a real install where injection taps bypass the pigtail.
+      </div>
+
+      <div id="injModelFields" style="display:none; margin-top:10px; padding-top:10px; border-top:1px dashed var(--border);">
+
+        <div class="field" style="margin-bottom:10px;">
+          <label>Pixels before first injection <button class="info-btn" onclick="toggleTip(this,'injModelFirst')">i</button></label>
+          <input type="number" id="injModelFirst" value="100" min="1" step="10">
+        </div>
+
+        <div class="field" style="margin-bottom:10px;">
+          <label>Injection spacing (pixels between taps) <button class="info-btn" onclick="toggleTip(this,'injModelSpacing')">i</button></label>
+          <input type="number" id="injModelSpacing" value="100" min="10" step="10">
+        </div>
+
+        <div class="field" style="margin-bottom:10px;">
+          <label>Injection cable length (ft, each) <button class="info-btn" onclick="toggleTip(this,'injModelLen')">i</button></label>
+          <input type="number" id="injModelLen" value="15" min="0.5" step="0.5">
+        </div>
+
+        <div class="field" style="margin-bottom:0;">
+          <label>Injection power source <button class="info-btn" onclick="toggleTip(this,'injModelSource')">i</button></label>
+          <select id="injModelSource" onchange="onInjSourceChange()">
+            <option value="same" selected>Same PSU (spare V+/V- output pair)</option>
+            <option value="dedicatedSame">Dedicated injection PSU(s) — same model as main</option>
+            <option value="dedicatedDiff">Dedicated injection PSU(s) — different model</option>
+          </select>
+          <div id="injSourceDiffWrap" style="display:none; margin-top:6px;">
+            <select id="injModelSourcePS"></select>
+          </div>
+          <div id="injSourceSameNote" style="display:block; font-size:.7rem; color:var(--muted); margin-top:6px; padding:6px 8px; background:rgba(245,158,11,.06); border-left:2px solid var(--warn); border-radius:0 4px 4px 0; line-height:1.5;">
+            &#9888; If your PSU does not have an unused V+/V- output pair and you double up connections on a single screw terminal set, you are doing so at your own risk — this is generally not advised.
+          </div>
+        </div>
+
+      </div>
+    </div>
+
     <div class="section-label">Power Supply Settings</div>
 
     <div class="field">
@@ -1480,6 +1527,31 @@ function onVoltageChange() {
 function v(id) { return document.getElementById(id).value; }
 function vn(id) { return parseFloat(document.getElementById(id).value); }
 
+// ── Injection modeling toggle + source handlers ──────────────────────────
+function onInjModelToggle() {
+  const on = document.getElementById('injModelEnabled').checked;
+  document.getElementById('injModelFields').style.display = on ? 'block' : 'none';
+}
+function onInjSourceChange() {
+  const src = v('injModelSource');
+  document.getElementById('injSourceDiffWrap').style.display  = (src === 'dedicatedDiff') ? 'block' : 'none';
+  document.getElementById('injSourceSameNote').style.display  = (src === 'same') ? 'block' : 'none';
+  if (src === 'dedicatedDiff') populateInjSourcePS();
+}
+function populateInjSourcePS() {
+  const sel = document.getElementById('injModelSourcePS');
+  if (sel.options.length > 0) return;    // already populated
+  // Match the voltage of the main pixel supply when possible
+  const volts = getPixelVolts();
+  const matches = filterPSForVoltage(volts);
+  matches.forEach(([key, ps]) => {
+    const opt = document.createElement('option');
+    opt.value = key;
+    opt.textContent = `${ps.name} — ${ps.watts}W / ${ps.volts}V / ${ps.amps}A`;
+    sel.appendChild(opt);
+  });
+}
+
 // ── Main calculation ───────────────────────────────────────────────────────
 let voltagDropChart = null;
 
@@ -1507,6 +1579,15 @@ function calculate() {
   const extGauge      = parseInt(v('extensionGauge'));
   const extLen        = vn('extensionLen');
 
+  // Injection modeling (optional)
+  const injModelOn     = document.getElementById('injModelEnabled').checked;
+  const injModelFirst  = injModelOn ? Math.max(1, Math.round(vn('injModelFirst'))) : 0;
+  const injModelSpacing= injModelOn ? Math.max(1, Math.round(vn('injModelSpacing'))) : 0;
+  const injModelLen    = injModelOn ? vn('injModelLen') : 0;
+  const injModelSource = injModelOn ? v('injModelSource') : 'same';
+  const injModelSrcPS  = (injModelOn && injModelSource === 'dedicatedDiff' && v('injModelSourcePS'))
+                           ? PS_MODELS[v('injModelSourcePS')] : null;
+
   // Pixel spacing in feet
   let spacingFt;
   if (v('density') === 'custom') {
@@ -1523,19 +1604,62 @@ function calculate() {
   const totalAmpsDC  = numPixels * ampsPerPixel;
   const totalWattsDC = totalAmpsDC * VOLTS;   // = numPixels * wattsPerPixel * brightness
 
-  // PS sizing with derate
-  const usableWatts  = ps.watts * psDerate;
-  const usableAmps   = ps.amps * psDerate;
-  const numPS        = Math.ceil(totalWattsDC / usableWatts);
-  const wattsPerPS   = totalWattsDC / numPS;
-  const ampsPerPS    = wattsPerPS / VOLTS;
-
   // Real World Usage (RWU) scaling — typical colorful show sequences only draw
   // a fraction of peak-white rated load. Used to show a second "realistic" drop
   // alongside the peak-worst-case drop so installers aren't scared by numbers
   // that only occur during an all-white chase.
   const rwuFactor    = vn('rwuFactor') / 100;
-  const rwuAmpsPerPS = ampsPerPS * rwuFactor;
+
+  // ── Split load between the "main feed" (pigtail+extension initial push) and
+  //    the "injection feed" when injection modeling is enabled.
+  //    When modeling is OFF, mainPixels = numPixels and injPixels = 0 — this
+  //    preserves the pre-existing "pigtail carries whole strand" behavior.
+  const mainPixels = injModelOn ? Math.min(numPixels, injModelFirst) : numPixels;
+  const injPixels  = Math.max(0, numPixels - mainPixels);
+
+  // Main PSU DC load:
+  //   - Injection off OR 'same' PSU source → feeds the whole strand (full load)
+  //   - Dedicated injection PSU → feeds only the pre-injection segment
+  const mainPSFeedsFullStrand = (!injModelOn) || (injModelSource === 'same');
+  const mainWattsDC = mainPSFeedsFullStrand ? totalWattsDC : (mainPixels * wattsPerPixel * brightness);
+
+  // PS sizing with derate (main)
+  const usableWatts  = ps.watts * psDerate;
+  const usableAmps   = ps.amps * psDerate;
+  const numPS        = Math.max(1, Math.ceil(mainWattsDC / usableWatts));
+  const wattsPerPS   = mainWattsDC / numPS;
+  const ampsPerPS    = wattsPerPS / VOLTS;
+
+  // Current through the pigtail + extension:
+  //   - Injection modeling ON  → only the initial-push segment's amperage
+  //     (pre-injection pixels × amps/px). Independent of PSU count because
+  //     the user has explicitly said where injection takes over.
+  //   - Injection modeling OFF → ampsPerPS (preserves original behavior:
+  //     each PSU feeds its own segment of the strand in parallel).
+  const mainFeedAmps    = injModelOn ? (mainPixels * ampsPerPixel) : ampsPerPS;
+  const rwuMainFeedAmps = mainFeedAmps * rwuFactor;
+  const rwuAmpsPerPS    = ampsPerPS * rwuFactor;
+
+  // Dedicated injection PSU sizing (only if modeling ON and dedicated)
+  const injPS = injModelOn
+    ? (injModelSource === 'dedicatedSame' ? ps
+        : injModelSource === 'dedicatedDiff' && injModelSrcPS ? injModelSrcPS
+        : null)
+    : null;
+  const injWattsDC   = (injPS && injPixels > 0) ? (injPixels * wattsPerPixel * brightness) : 0;
+  const injUsableW   = injPS ? injPS.watts * psDerate : 0;
+  const injNumPS     = (injPS && injWattsDC > 0) ? Math.max(1, Math.ceil(injWattsDC / injUsableW)) : 0;
+  const injWattsPerPS= injNumPS > 0 ? injWattsDC / injNumPS : 0;
+  const injAmpsPerPS = injPS && injNumPS > 0 ? injWattsPerPS / injPS.volts : 0;
+
+  // Per-injection-cable current — each cable feeds one segment of pixels
+  const injCableAmps    = injModelOn ? injModelSpacing * ampsPerPixel : 0;
+  const rwuInjCableAmps = injCableAmps * rwuFactor;
+  const injCableRes     = WIRE_RES[parseInt(v('injGauge'))];
+  const injCableVdrop     = injCableAmps    * injCableRes * 2 * injModelLen;
+  const rwuInjCableVdrop  = rwuInjCableAmps * injCableRes * 2 * injModelLen;
+  const numInjCables      = injModelOn && injModelSpacing > 0 && injPixels > 0
+                              ? Math.ceil(injPixels / injModelSpacing) : 0;
 
   // ── AC calculations ──────────────────────────────────────────────────────
   const acDrawPerPS  = ps.watts / ps.efficiency;
@@ -1552,31 +1676,35 @@ function calculate() {
   // Both carry the full PS output current (ampsPerPS) to the strip start.
   const pigtailRes  = pigtailOn ? WIRE_RES[pigtailGauge] : 0;
   const extRes      = WIRE_RES[extGauge];
-  const vdropPigtail   = ampsPerPS * pigtailRes   * 2 * pigtailLen;
-  const vdropExtension = ampsPerPS * extRes        * 2 * extLen;
+  // Pigtail + extension carry mainFeedAmps (only the initial-push segment's
+  // current when injection modeling is on — equals ampsPerPS otherwise).
+  const vdropPigtail   = mainFeedAmps * pigtailRes * 2 * pigtailLen;
+  const vdropExtension = mainFeedAmps * extRes     * 2 * extLen;
   const vAtStrip    = Math.max(0, VOLTS - vdropPigtail - vdropExtension);
   const vBudgetStrip = Math.max(0, vAtStrip - minV);
   const totalBudget  = Math.max(0, VOLTS - minV);   // headroom from nominal to min (e.g. 12-11=1V)
 
   // RWU-scaled drops (realistic show load, not peak white)
-  const rwuVdropPigtail   = rwuAmpsPerPS * pigtailRes * 2 * pigtailLen;
-  const rwuVdropExtension = rwuAmpsPerPS * extRes     * 2 * extLen;
+  const rwuVdropPigtail   = rwuMainFeedAmps * pigtailRes * 2 * pigtailLen;
+  const rwuVdropExtension = rwuMainFeedAmps * extRes     * 2 * extLen;
   const rwuVAtStrip       = Math.max(0, VOLTS - rwuVdropPigtail - rwuVdropExtension);
   const rwuVBudgetStrip   = Math.max(0, rwuVAtStrip - minV);
 
   // Maximum extension length before the strip voltage budget is fully consumed
-  // Solve:  ampsPerPS * extRes * 2 * maxExtLen = totalBudget - vdropPigtail
+  // Solve:  mainFeedAmps * extRes * 2 * maxExtLen = totalBudget - vdropPigtail
   const vBudgetForExt = Math.max(0, totalBudget - vdropPigtail);
-  const maxExtLen = (ampsPerPS > 0 && extRes > 0)
-    ? vBudgetForExt / (ampsPerPS * extRes * 2)
+  const maxExtLen = (mainFeedAmps > 0 && extRes > 0)
+    ? vBudgetForExt / (mainFeedAmps * extRes * 2)
     : Infinity;
 
-  // Wire ampacity checks
+  // Wire ampacity checks — pigtail/extension carry only mainFeedAmps, injection
+  // cables carry injCableAmps. Dedicated inj-cable ampacity check is separate.
   const extAmpacity     = WIRE_AMP[extGauge];
   const injAmpacity     = WIRE_AMP[injGauge];
   const pigtailAmpacity = pigtailOn ? WIRE_AMP[pigtailGauge] : Infinity;
-  const extOk           = ampsPerPS <= extAmpacity;
-  const pigtailOk       = ampsPerPS <= pigtailAmpacity;
+  const extOk           = mainFeedAmps <= extAmpacity;
+  const pigtailOk       = mainFeedAmps <= pigtailAmpacity;
+  const injCableOk      = !injModelOn || injCableAmps <= injAmpacity;
 
   // ── Injection spacing — N² tapered current model ─────────────────────────
   // In a run of N pixels fed from one end, current at any point tapers.
@@ -1683,7 +1811,7 @@ function calculate() {
         fixes.push(`Shorten extension to <strong style="color:var(--text)">&le;${maxExtLen.toFixed(1)} ft</strong> (max for ${extGauge} AWG at this load)`);
       }
       // What gauge would keep the same extension length?
-      const neededRes = (totalBudget - vdropPigtail) / (ampsPerPS * 2 * extLen);
+      const neededRes = (totalBudget - vdropPigtail) / (mainFeedAmps * 2 * extLen);
       const suggestGauge = [10, 12, 14, 16].find(g => WIRE_RES[g] <= neededRes);
       if (suggestGauge && suggestGauge < extGauge) {
         fixes.push(`Upgrade extension to <strong style="color:var(--text)">${suggestGauge} AWG</strong> (resistance low enough for this run)`);
@@ -1839,12 +1967,16 @@ function calculate() {
         </div>
       </div>
 
-      <div class="card ${extOk && pigtailOk ? 'ok' : 'danger'}">
+      <div class="card ${extOk && pigtailOk && injCableOk ? 'ok' : 'danger'}">
         <div class="card-title">DC Feed Chain &mdash; PS to First Pixel ${extBadge}</div>
         <div class="card-value">${vAtStrip.toFixed(2)}V</div>
         <div class="card-unit">Voltage arriving at pixel 1 (after external wiring losses)</div>
         <div class="card-detail">
           <strong>Total voltage budget (${VOLTS}V &minus; ${minV}V min):</strong> ${totalBudget.toFixed(3)}V<br>
+          ${injModelOn ? `
+          <div style="margin:5px 0 3px 0; font-size:.76rem; color:var(--accent); font-weight:700;">
+            &#9654; Initial-push path (feeds pixels 1&ndash;${mainPixels} &mdash; ${mainFeedAmps.toFixed(2)}A peak / ${rwuMainFeedAmps.toFixed(2)}A RWU)
+          </div>` : ''}
           <div style="margin:5px 0 5px 8px; padding:6px 10px; background:rgba(255,255,255,.04); border-left:2px solid var(--border); border-radius:0 5px 5px 0; font-size:.76rem; line-height:1.85;">
             ${pigtailOn
               ? `Pigtail &nbsp;(${pigtailGauge} AWG, ${pigtailLen} ft): &minus;${vdropPigtail.toFixed(3)}V &nbsp;[${totalBudget > 0 ? ((vdropPigtail/totalBudget)*100).toFixed(0) : '—'}% of budget] ${pigtailBadge}<br>`
@@ -1866,7 +1998,27 @@ function calculate() {
           ${vBudgetStrip <= 0 && isFinite(maxExtLen)
             ? `<br><span style="color:var(--warn); font-size:.76rem;">&#9888; Max ${extGauge} AWG extension length: <strong style="color:var(--text)">${maxExtLen.toFixed(1)} ft</strong> before budget is exhausted</span>`
             : isFinite(maxExtLen) ? `<br><span style="color:var(--muted); font-size:.76rem;">Max ${extGauge} AWG extension before budget gone: <strong style="color:var(--text)">${maxExtLen.toFixed(1)} ft</strong></span>` : ''}
-          <br><strong>Injection wire (${injGauge} AWG):</strong> ${injAmpacity}A rated &mdash; ${injTapAmps.toFixed(2)}A per tap &mdash; limited by <em>${injLimitedBy}</em>
+          ${injModelOn && numInjCables > 0 ? `
+          <div style="margin:10px 0 3px 0; font-size:.76rem; color:var(--accent); font-weight:700;">
+            &#9654; Injection chain (bypasses pigtail &mdash; feeds pixels ${mainPixels+1}&ndash;${numPixels})
+          </div>
+          <div style="margin:3px 0 5px 8px; padding:6px 10px; background:rgba(79,142,247,.06); border-left:2px solid var(--accent); border-radius:0 5px 5px 0; font-size:.76rem; line-height:1.85;">
+            ${numInjCables} injection cable${numInjCables>1?'s':''} &times; ${injModelLen} ft of ${injGauge} AWG<br>
+            Current per cable: <strong style="color:var(--text)">${injCableAmps.toFixed(2)}A peak</strong>
+              / <span style="color:var(--ok)">${rwuInjCableAmps.toFixed(2)}A RWU</span>
+              ${injCableOk ? '<span class="badge badge-ok">OK</span>' : '<span class="badge badge-danger">OVER '+injAmpacity+'A</span>'}<br>
+            Drop to injection point: <strong style="color:var(--text)">&minus;${injCableVdrop.toFixed(3)}V peak</strong>
+              / <span style="color:var(--ok)">&minus;${rwuInjCableVdrop.toFixed(3)}V RWU</span><br>
+            Voltage arriving at tap: <strong style="color:var(--text)">${(VOLTS - injCableVdrop).toFixed(2)}V peak</strong>
+              / <span style="color:var(--ok)">${(VOLTS - rwuInjCableVdrop).toFixed(2)}V RWU</span>
+              <span style="color:var(--muted); font-size:.72rem;"> (at the tap, before pixels downstream draw current)</span><br>
+            Injection source: <strong style="color:var(--text)">${
+              injModelSource === 'same' ? 'Same PSU (spare V+/V- pair)'
+              : injModelSource === 'dedicatedSame' ? 'Dedicated — same model as main'
+              : 'Dedicated — '+(injPS ? injPS.name : '')
+            }</strong>
+          </div>` : ''}
+          <br><strong>Injection wire sizing reference (${injGauge} AWG):</strong> ${injAmpacity}A rated &mdash; ${injTapAmps.toFixed(2)}A per tap &mdash; limited by <em>${injLimitedBy}</em>
           ${injTapOk ? ' <span class="badge badge-ok">OK</span>' : ' <span class="badge badge-danger">OVERLOADED</span>'}
         </div>
       </div>
@@ -1879,6 +2031,7 @@ function calculate() {
         <table>
           <thead><tr>
             <th>Supply #</th>
+            <th>Role</th>
             <th>Model</th>
             <th>DC Output</th>
             <th>Actual Load</th>
@@ -1889,14 +2042,37 @@ function calculate() {
             ${Array.from({length: numPS}, (_, i) => `
             <tr>
               <td><strong>PS ${i + 1}</strong></td>
+              <td>${injModelOn && injPS ? '<span style="color:var(--accent); font-weight:600;">Main</span>' : 'Main'}${injModelOn && injModelSource==='same' ? '<br><span style="font-size:.7rem; color:var(--muted);">(also feeds injection via spare V+/V- pair)</span>' : ''}</td>
               <td>${ps.name}</td>
               <td>${ps.volts}V / ${ps.amps}A / ${ps.watts}W rated</td>
               <td>${ampsPerPS.toFixed(2)}A &mdash; ${wattsPerPS.toFixed(1)}W</td>
               <td>${acAmpsPerPS.toFixed(2)}A &mdash; ${acDrawPerPS.toFixed(1)}W @ ${acV}V AC</td>
               <td><span class="badge ${(wattsPerPS/ps.watts)<=psDerate ? 'badge-ok':'badge-danger'}">${((wattsPerPS/ps.watts)*100).toFixed(0)}%</span></td>
             </tr>`).join('')}
+            ${(injModelOn && injPS && injNumPS > 0) ? Array.from({length: injNumPS}, (_, i) => {
+              const injAcDraw = injPS.watts / injPS.efficiency;
+              const injAcA    = injAcDraw / acV;
+              return `
+            <tr style="background:rgba(79,142,247,.04);">
+              <td><strong>PS ${numPS + i + 1}</strong></td>
+              <td><span style="color:var(--accent); font-weight:600;">Injection</span><br><span style="font-size:.7rem; color:var(--muted);">feeds pixels ${mainPixels+1}&ndash;${numPixels}</span></td>
+              <td>${injPS.name}</td>
+              <td>${injPS.volts}V / ${injPS.amps}A / ${injPS.watts}W rated</td>
+              <td>${injAmpsPerPS.toFixed(2)}A &mdash; ${injWattsPerPS.toFixed(1)}W</td>
+              <td>${injAcA.toFixed(2)}A &mdash; ${injAcDraw.toFixed(1)}W @ ${acV}V AC</td>
+              <td><span class="badge ${(injWattsPerPS/injPS.watts)<=psDerate ? 'badge-ok':'badge-danger'}">${((injWattsPerPS/injPS.watts)*100).toFixed(0)}%</span></td>
+            </tr>`;
+            }).join('') : ''}
           </tbody>
         </table>
+        ${injModelOn && injModelSource === 'same' ? `
+        <div style="margin-top:8px; padding:8px 12px; background:rgba(245,158,11,.06); border-left:3px solid var(--warn); border-radius:0 5px 5px 0; font-size:.78rem; line-height:1.65; color:var(--muted);">
+          <strong style="color:var(--text);">Note:</strong> Injection is drawn from the main PSU's spare V+/V- output pair, so the main PSU sizing above already covers the full strand load. If your PSU does not have an unused output pair and you double up on a single screw terminal set, you are doing so at your own risk &mdash; this is generally not advised.
+        </div>` : ''}
+        ${injModelOn && injPS ? `
+        <div style="margin-top:8px; padding:8px 12px; background:rgba(79,142,247,.06); border-left:3px solid var(--accent); border-radius:0 5px 5px 0; font-size:.78rem; line-height:1.65; color:var(--muted);">
+          <strong style="color:var(--text);">Dedicated injection PSU:</strong> Main PSU sizing above covers pixels 1&ndash;${mainPixels} (the initial-push segment). The injection PSU${injNumPS>1?'s':''} above cover${injNumPS>1?'':'s'} pixels ${mainPixels+1}&ndash;${numPixels} via the injection cables, bypassing the pigtail/extension entirely.
+        </div>` : ''}
       </div>
     </div>
 
@@ -2220,6 +2396,83 @@ const TIPS = {
       <strong>Important:</strong> This length directly affects how much voltage is available at the first pixel.
       A 50 ft extension at 15A on 14 AWG drops ~1.1V — significant for a 1V total budget.
       Use the results card to see the exact drop for your inputs.
+    </div>`
+  },
+  injModelEnabled: {
+    title: 'Model My Actual Injection Setup',
+    body: `<div class="tip-section">
+      <div class="tip-section-head">What this does</div>
+      Turns on a realistic model where <strong>the pigtail and extension only carry the current for the first few pixels</strong>
+      (up to the first injection point), not the whole strand. This matches how real installs actually work on multi-port
+      controllers like the Kulp K32A &mdash; the PSU feeds injection taps directly, bypassing the pigtail.
+    </div>
+    <div class="tip-section">
+      <div class="tip-section-head">When to turn it ON</div>
+      &bull; You have <strong>any mid-strand power injection</strong> on this prop.<br>
+      &bull; You want to see realistic pigtail current (not the pessimistic whole-strand number).<br>
+      &bull; You want the tool to size a dedicated injection PSU for you.
+    </div>
+    <div class="tip-section">
+      <div class="tip-section-head">When to leave it OFF</div>
+      &bull; Single-port, no injection &mdash; the pigtail really does carry the whole strand.<br>
+      &bull; You want the conservative worst-case number.<br>
+      Leaving it off preserves the original tool behavior exactly.
+    </div>`
+  },
+  injModelFirst: {
+    title: 'Pixels Before First Injection',
+    body: `<div class="tip-section">
+      <div class="tip-section-head">What to enter</div>
+      The number of pixels fed by the <strong>initial-push path</strong> (pigtail + extension) before the first injection tap takes over.
+      This is the only part of the strand whose current flows through the pigtail.
+    </div>
+    <div class="tip-section">
+      <div class="tip-section-head">How to pick a value</div>
+      &bull; <strong>50&ndash;150 px</strong> &mdash; typical for a prop with aggressive injection every 100 px.<br>
+      &bull; <strong>300&ndash;500 px</strong> &mdash; longer initial segment before voltage drop forces a tap.<br>
+      The right value is dictated by your voltage budget &mdash; see the injection advice section for guidance.
+    </div>`
+  },
+  injModelSpacing: {
+    title: 'Injection Spacing',
+    body: `<div class="tip-section">
+      <div class="tip-section-head">What to enter</div>
+      Number of pixels between adjacent injection taps. Combined with "pixels before first injection", this tells the tool
+      how many injection cables you need and how much current each one carries.
+    </div>
+    <div class="tip-section">
+      <div class="tip-section-head">Typical values</div>
+      &bull; <strong>100 px</strong> &mdash; aggressive injection, most reliable for long props.<br>
+      &bull; <strong>150&ndash;200 px</strong> &mdash; common for props at 12V with regulated pixels and short injection runs.<br>
+      Smaller spacing = more cables, less current per cable, less voltage drop per segment.
+    </div>`
+  },
+  injModelLen: {
+    title: 'Injection Cable Length',
+    body: `<div class="tip-section">
+      <div class="tip-section-head">What to enter</div>
+      The length (feet) of <strong>each</strong> injection cable &mdash; the run from your PSU (or injection bus) to each tap on the strand.
+      All cables are assumed the same length for sizing purposes; if yours vary, use the longest one for the worst-case drop.
+    </div>`
+  },
+  injModelSource: {
+    title: 'Injection Power Source',
+    body: `<div class="tip-section">
+      <div class="tip-section-head">Same PSU (spare V+/V- output pair)</div>
+      Most big PSUs (MeanWell LRS-350 &amp; similar) have 3 pairs of V+/V- screw terminals. One pair feeds the controller,
+      a second pair can feed injection cables directly. <strong>The main PSU must be sized for the full strand load</strong>
+      because it's feeding everything.<br>
+      <strong style="color:var(--warn)">&#9888; If your PSU has no unused output pair</strong> and you double up on a single screw terminal set,
+      you are doing so at your own risk &mdash; generally not advised.
+    </div>
+    <div class="tip-section">
+      <div class="tip-section-head">Dedicated injection PSU(s) &mdash; same model</div>
+      A separate PSU (same model as main) handles injection only. The main PSU only needs to be sized for the initial-push segment.
+      Cleaner electrically, more hardware.
+    </div>
+    <div class="tip-section">
+      <div class="tip-section-head">Dedicated injection PSU(s) &mdash; different model</div>
+      Same as above but pick a different PSU model (often a smaller one, since only the injection segment load matters).
     </div>`
   },
   injGauge: {
