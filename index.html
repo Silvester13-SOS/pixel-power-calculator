@@ -1041,6 +1041,20 @@
       <input type="number" id="ctrlExtLen" value="10" min="0" step="1">
     </div>
 
+    <div class="field">
+      <label>String Wire Gauge
+        <span style="font-size:.72rem; color:var(--muted); font-weight:400;">(conductors inside the pixel string)</span>
+      </label>
+      <select id="ctrlStringGauge">
+        <option value="16">16 AWG (13A) &mdash; thick commercial strings</option>
+        <option value="18">18 AWG (7A) &mdash; heavy xConnect / commercial</option>
+        <option value="20">20 AWG (5A) &mdash; xConnect / mid-grade</option>
+        <option value="22" selected>22 AWG (3A) &mdash; typical bullet pigtail</option>
+        <option value="24">24 AWG (2A) &mdash; cheap / undersized</option>
+      </select>
+      <div class="field-hint">Most stock bullet-pixel pigtails are <strong>22 AWG</strong>. xConnect-style harnesses are usually <strong>18&ndash;20 AWG</strong>. This gauge drives the voltage drop along the string &mdash; which decides whether you need injection.</div>
+    </div>
+
     <div class="section-label">Power Injection</div>
 
     <div id="ctrlMinVNote" style="padding:7px 10px; background:rgba(79,142,247,.07);
@@ -1415,6 +1429,13 @@ const PS_MODELS = {
 const WIRE_RES = { 10: 0.001000, 12: 0.001588, 14: 0.002525, 16: 0.004016, 18: 0.006385, 20: 0.010150, 22: 0.016140 };
 // NEC ampacity (PVC 60°C, open air)
 const WIRE_AMP = { 10: 30, 12: 20, 14: 15, 16: 13, 18: 7, 20: 5, 22: 3 };
+// Smallest standard gauge whose ampacity ≥ the given current.
+// Returns a string like "10" or "10 (or larger)" when the load exceeds the biggest gauge in table.
+function recommendedGauge(amps) {
+  const order = [22, 20, 18, 16, 14, 12, 10];  // smallest → largest conductor
+  for (const g of order) if (WIRE_AMP[g] >= amps) return g;
+  return '10 or larger';
+}
 
 // Voltage-specific defaults
 const VOLT_DEFAULTS = {
@@ -3657,6 +3678,11 @@ function _calculateController() {
   const extLen        = parseFloat(document.getElementById('ctrlExtLen').value) || 0;
   const extRes        = WIRE_RES[extGauge];
   const extAmpacity   = WIRE_AMP[extGauge];
+  // ── String wire (conductors inside the pixel harness) ────────────────────
+  // Drives the along-string voltage drop that decides injection need.
+  const stringGauge   = parseInt(document.getElementById('ctrlStringGauge')?.value || '22');
+  const stringRes     = WIRE_RES[stringGauge];
+  const stringAmpacity = WIRE_AMP[stringGauge];
 
   // ── Injection settings ────────────────────────────────────────────────────
   const minV          = getVoltDefaults(VOLTS)[pixelType].minV;
@@ -3669,9 +3695,16 @@ function _calculateController() {
     ? (parseFloat(document.getElementById('ctrlCustomSpacing').value) || 4) / 12
     : parseFloat(densityVal) / 12;
 
-  const ampsPerPixel  = (wattsPerPixel * brightness) / VOLTS;
-  const rwuFactor     = parseFloat(document.getElementById('ctrlRwuFactor').value) / 100;
-  const rwuAmpsPerPx  = ampsPerPixel * rwuFactor;
+  // ── Per-pixel current tiers ───────────────────────────────────────────────
+  //   WORST : 100% white on every pixel — the absolute ceiling WS2811/WS2812B
+  //           can physically draw. Used for ALL safety-critical calcs
+  //           (PSU count, ampacity, fuses, injection decision).
+  //   SHOW  : what the user's show tops out at (max brightness slider).
+  //   RWU   : realistic draw accounting for colour mix / animation.
+  const ampsPerPixelWorst = wattsPerPixel / VOLTS;
+  const ampsPerPixel      = (wattsPerPixel * brightness) / VOLTS;   // "show" basis
+  const rwuFactor         = parseFloat(document.getElementById('ctrlRwuFactor').value) / 100;
+  const rwuAmpsPerPx      = ampsPerPixel * rwuFactor;
   const usableWatts   = ps.watts * psDerate;
   const usableAmps    = ps.amps  * psDerate;
   const usableCircuitA = breakerA * acSafety;
@@ -3699,14 +3732,21 @@ function _calculateController() {
     }
     const totalPx       = portPxArr.reduce((s, v) => s + v, 0);
     const maxPortPx     = Math.max(...portPxArr);
+    // SHOW basis (brightness-adjusted — what the user's show tops out at)
     const totalAmps     = totalPx * ampsPerPixel;
     const maxPortAmps   = maxPortPx * ampsPerPixel;
     const totalWatts    = totalAmps * VOLTS;
+    // WORST basis (100% white — safety ceiling)
+    const totalAmpsWorst   = totalPx * ampsPerPixelWorst;
+    const maxPortAmpsWorst = maxPortPx * ampsPerPixelWorst;
+    const totalWattsWorst  = totalAmpsWorst * VOLTS;
+    // RWU basis (realistic estimate on top of show)
     const rwuTotalAmps   = totalPx * rwuAmpsPerPx;
     const rwuTotalWatts  = rwuTotalAmps * VOLTS;
     const rwuMaxPortAmps = maxPortPx * rwuAmpsPerPx;
-    const bankOver       = totalAmps > spec.maxAmpsPerBank;
-    const portOver       = spec.ampsPerPort ? maxPortAmps > spec.ampsPerPort : false;
+    // Over-limit checks use WORST case (safety-critical)
+    const bankOver       = totalAmpsWorst > spec.maxAmpsPerBank;
+    const portOver       = spec.ampsPerPort ? maxPortAmpsWorst > spec.ampsPerPort : false;
     const rwuBankOver    = rwuTotalAmps > spec.maxAmpsPerBank;
     const rwuPortOver    = spec.ampsPerPort ? rwuMaxPortAmps > spec.ampsPerPort : false;
     // avg px/port label: "uniform N" when all equal, "N–M" when mixed
@@ -3714,7 +3754,9 @@ function _calculateController() {
     const pixPerPortLabel = (mode === 'port' && minPortPx !== maxPortPx)
       ? `${minPortPx}–${maxPortPx} (mixed)` : `${maxPortPx}`;
     bankData.push({ b, bankNum:b+1, portPxArr, pixPerPortLabel, totalPx, maxPortPx,
-      totalAmps, maxPortAmps, totalWatts, rwuTotalAmps, rwuTotalWatts, rwuMaxPortAmps,
+      totalAmps, maxPortAmps, totalWatts,
+      totalAmpsWorst, maxPortAmpsWorst, totalWattsWorst,
+      rwuTotalAmps, rwuTotalWatts, rwuMaxPortAmps,
       bankOver, portOver, rwuBankOver, rwuPortOver,
       portStart: b*spec.portsPerBank+1, portEnd: (b+1)*spec.portsPerBank });
   }
@@ -3725,26 +3767,35 @@ function _calculateController() {
     b.portExtData = [];
     b.portInjData = [];
     b.portPxArr.forEach((px, i) => {
+      // SHOW basis (user's max brightness) — used for display and RWU reference
       const portAmps    = px * ampsPerPixel;
-      const vdropCtoE   = portAmps * ctoERes * 2 * ctoELen;   // controller → ext connector
-      const vdropExt    = portAmps * extRes * 2 * extLen;       // ext connector → first pixel
+      // WORST basis (100% white) — safety-critical. Ampacity/fuse checks use this.
+      const portAmpsWorst = px * ampsPerPixelWorst;
+      const vdropCtoE   = portAmpsWorst * ctoERes * 2 * ctoELen;   // controller → ext connector
+      const vdropExt    = portAmpsWorst * extRes * 2 * extLen;     // ext connector → first pixel
       const vdropPortTotal = vdropCtoE + vdropExt;
-      const ctoEPortOk  = ctoEOn ? portAmps <= ctoEAmpacity : true;
-      const extPortOk   = portAmps <= extAmpacity;
-      b.portExtData.push({ px, portAmps, vdropCtoE, vdropExt, vdropPortTotal, ctoEPortOk, extPortOk });
+      // Hard-fail ampacity checks at WORST case
+      const ctoEPortOk  = ctoEOn ? portAmpsWorst <= ctoEAmpacity : true;
+      const extPortOk   = portAmpsWorst <= extAmpacity;
+      b.portExtData.push({ px, portAmps, portAmpsWorst, vdropCtoE, vdropExt, vdropPortTotal, ctoEPortOk, extPortOk });
 
       // ── Injection calc for this port ─────────────────────────────────────
-      // Budget = total voltage headroom minus this port's wiring drops
-      // (CtoE pigtail + extension). PSU→Ctrl wire is bank-level, excluded
-      // to keep identical pixel counts producing identical injection results.
+      // Budget = total voltage headroom minus this port's feeder wiring drops.
+      // The INJECTION DECISION uses WORST case current (100% white) and STRING
+      // wire gauge (not injection wire). This answers the real question:
+      // "at 100% white, does the voltage along the string drop below the
+      // pixel's min operating voltage before the end?"
       const vBudget     = Math.max(0, totalBudget - vdropPortTotal);
-      const pixPerSegVd = (vBudget > 0 && ampsPerPixel > 0 && spacingFt > 0)
-        ? Math.floor(Math.sqrt(vBudget / (ampsPerPixel * injResPerFt * spacingFt)))
+      // Distributed-load along-string drop: V = p² · i · r · s
+      //   → max pixels per segment = sqrt(V_budget / (i · r_string · s))
+      const pixPerSegVd = (vBudget > 0 && ampsPerPixelWorst > 0 && spacingFt > 0)
+        ? Math.floor(Math.sqrt(vBudget / (ampsPerPixelWorst * stringRes * spacingFt)))
         : 0;
-      const pixPerSegA  = ampsPerPixel > 0 ? Math.floor(injAmpacity / ampsPerPixel) : 999999;
+      // Injection wire ampacity caps how many pixels one tap can feed
+      const pixPerSegA  = ampsPerPixelWorst > 0 ? Math.floor(injAmpacity / ampsPerPixelWorst) : 999999;
       // Port fuse constraint: controller fuse limits current through any single port run
-      const pixPerSegF  = (spec.ampsPerPort && ampsPerPixel > 0)
-        ? Math.floor(spec.ampsPerPort / ampsPerPixel) : 999999;
+      const pixPerSegF  = (spec.ampsPerPort && ampsPerPixelWorst > 0)
+        ? Math.floor(spec.ampsPerPort / ampsPerPixelWorst) : 999999;
       const pixPerSegRaw = pixPerSegVd > 0 ? Math.min(pixPerSegVd, pixPerSegA, pixPerSegF) : 0;
       const pixPerSeg   = pixPerSegRaw > 0 ? Math.max(1, pixPerSegRaw) : 0;
       // Track which constraint is binding (most restrictive)
@@ -3782,7 +3833,7 @@ function _calculateController() {
       const injSaved      = numInj - rwuNumInj;   // how many injection points RWU saves
 
       b.portInjData.push({
-        portNum: b.portStart + i, px, portAmps, rwuPortAmps, vdropExt, vBudget,
+        portNum: b.portStart + i, px, portAmps, portAmpsWorst, rwuPortAmps, vdropExt, vBudget,
         pixPerSegVd, pixPerSegA, pixPerSegF, pixPerSeg, limitedBy,
         numInj, injPositions, noBudget,
         needsInj: numInj > 0 || noBudget,
@@ -3792,18 +3843,19 @@ function _calculateController() {
     });
 
     // ── PSU load accounting for injection ───────────────────────────────────
-    // When injection is used, PSU only supplies pixels up to first injection point
+    // When injection is used, PSU only supplies pixels up to first injection point.
+    // Worst-case basis drives PSU sizing; show/RWU kept for display.
     const injReducesPsu = document.getElementById('ctrlInjReducesPsuLoad').checked;
     b.portInjData.forEach((p, i) => {
       if (injReducesPsu && p.injPositions.length > 0) {
-        // PSU supplies from start to first injection point only
         const psuPx = p.injPositions[0];  // first injection point
-        p.psuLoadAmps = psuPx * ampsPerPixel;
-        p.rwuPsuLoadAmps = psuPx * rwuAmpsPerPx;
+        p.psuLoadAmpsWorst = psuPx * ampsPerPixelWorst;
+        p.psuLoadAmps      = psuPx * ampsPerPixel;
+        p.rwuPsuLoadAmps   = psuPx * rwuAmpsPerPx;
       } else {
-        // PSU supplies all pixels (no injection or feature disabled)
-        p.psuLoadAmps = p.portAmps;
-        p.rwuPsuLoadAmps = p.rwuPortAmps;
+        p.psuLoadAmpsWorst = p.portAmpsWorst;
+        p.psuLoadAmps      = p.portAmps;
+        p.rwuPsuLoadAmps   = p.rwuPortAmps;
       }
     });
 
@@ -3816,19 +3868,23 @@ function _calculateController() {
     b.rwuTotalInj   = b.portInjData.reduce((s, p) => s + p.rwuNumInj, 0);
     b.portsNeedInj  = b.portInjData.filter(p => p.needsInj).length;
     b.rwuPortsNeedInj = b.portInjData.filter(p => p.rwuNeedsInj).length;
-    // PSU load totals (either full or injection-reduced)
+    // PSU load totals — worst case drives bin-packing, show/RWU for display
+    b.psuLoadAmpsWorst  = b.portInjData.reduce((s, p) => s + p.psuLoadAmpsWorst, 0);
+    b.psuLoadWattsWorst = b.psuLoadAmpsWorst * VOLTS;
     b.psuLoadAmps   = b.portInjData.reduce((s, p) => s + p.psuLoadAmps, 0);
     b.psuLoadWatts  = b.psuLoadAmps * VOLTS;
     b.rwuPsuLoadAmps  = b.portInjData.reduce((s, p) => s + p.rwuPsuLoadAmps, 0);
     b.rwuPsuLoadWatts = b.rwuPsuLoadAmps * VOLTS;
   });
 
-  const totalDCWatts   = bankData.reduce((s,b) => s+b.totalWatts, 0);
+  const totalDCWatts   = bankData.reduce((s,b) => s+b.totalWatts, 0);          // show
+  const totalDCWattsWorst = bankData.reduce((s,b) => s+b.totalWattsWorst, 0);  // worst
   const rwuTotalDCWatts = bankData.reduce((s,b) => s+b.rwuTotalWatts, 0);
   const totalPx        = bankData.reduce((s,b) => s+b.totalPx, 0);
   const maxCtoEDrop    = ctoEOn   ? Math.max(...bankData.map(b => b.maxCtoEDrop), 0) : 0;
   const maxExtDrop     = bankData.length ? Math.max(...bankData.map(b => b.maxExtDrop), 0) : 0;
   const maxPortAmps    = bankData.length ? Math.max(...bankData.map(b => b.maxPortAmps), 0) : 0;
+  const maxPortAmpsWorst = bankData.length ? Math.max(...bankData.map(b => b.maxPortAmpsWorst), 0) : 0;
   const totalInjPoints    = bankData.reduce((s, b) => s + b.totalInj, 0);
   const rwuTotalInjPoints = bankData.reduce((s, b) => s + b.rwuTotalInj, 0);
   const totalPortsNeedInj    = bankData.reduce((s, b) => s + b.portsNeedInj, 0);
@@ -3851,42 +3907,63 @@ function _calculateController() {
   if (rwuCurW > 0) rwuNumPS++;
   const rwuAvgLoadPerPS = rwuNumPS ? rwuTotalDCWatts / rwuNumPS : 0;
 
-  // ── Greedy PSU grouping (bin-pack banks onto PSUs using PSU load) ──────────
-  // Uses psuLoadWatts (injection-reduced if enabled) instead of totalWatts
+  // ── SHOW PSU count: parallel bin-packing using user's brightness setting ──
+  // For the dual-column display: "your show at X% would need Y PSUs"
+  let showCurW = 0, showNumPS = 0;
+  for (const bank of bankData) {
+    const bW = bank.totalWatts;
+    if (bW > usableWatts) {
+      if (showCurW > 0) { showNumPS++; showCurW = 0; }
+      showNumPS++;
+    } else if (showCurW + bW <= usableWatts) {
+      showCurW += bW;
+    } else {
+      showNumPS++;
+      showCurW = bW;
+    }
+  }
+  if (showCurW > 0) showNumPS++;
+
+  // ── Greedy PSU grouping (bin-pack banks onto PSUs using WORST-case load) ──
+  // Safety-critical: a PSU must survive 100% white moments, not just the
+  // user's typical show brightness. Use psuLoadWattsWorst.
   const psGroups = [];
   let curBanks = [], curWatts = 0;
   for (const bank of bankData) {
-    const bW = bank.psuLoadWatts;  // uses injection-reduced load if enabled
+    const bW = bank.psuLoadWattsWorst;
     if (bW > usableWatts) {
-      // Bank alone exceeds one PS
       if (curBanks.length) {
-        psGroups.push({banks:[...curBanks], psuLoadWatts:curWatts, overloaded:false});
+        psGroups.push({banks:[...curBanks], psuLoadWattsWorst:curWatts, overloaded:false});
         curBanks=[]; curWatts=0;
       }
-      psGroups.push({banks:[bank.b], psuLoadWatts:bW, overloaded:true});
+      psGroups.push({banks:[bank.b], psuLoadWattsWorst:bW, overloaded:true});
     } else if (curWatts + bW <= usableWatts) {
       curBanks.push(bank.b); curWatts += bW;
     } else {
-      psGroups.push({banks:[...curBanks], psuLoadWatts:curWatts, overloaded:false});
+      psGroups.push({banks:[...curBanks], psuLoadWattsWorst:curWatts, overloaded:false});
       curBanks=[bank.b]; curWatts=bW;
     }
   }
-  if (curBanks.length) psGroups.push({banks:[...curBanks], psuLoadWatts:curWatts, overloaded:false});
+  if (curBanks.length) psGroups.push({banks:[...curBanks], psuLoadWattsWorst:curWatts, overloaded:false});
 
   const psGroupData = psGroups.map((g, i) => {
-    // Calculate both PSU load (for bin-packing) and actual total watts (for display)
-    const totalWatts = g.banks.reduce((s, bi) => s + bankData[bi].totalWatts, 0);
-    const rwuTotalWatts = g.banks.reduce((s, bi) => s + bankData[bi].rwuTotalWatts, 0);
-    const psAmps       = g.psuLoadWatts / VOLTS;
-    const vdropPigtail = pigtailOn ? psAmps * pigtailRes * 2 * pigtailLen : 0;
-    const pigtailOk    = pigtailOn ? psAmps <= pigtailAmpacity : true;
+    const totalWatts      = g.banks.reduce((s, bi) => s + bankData[bi].totalWatts, 0);
+    const totalWattsWorst = g.banks.reduce((s, bi) => s + bankData[bi].totalWattsWorst, 0);
+    const rwuTotalWatts   = g.banks.reduce((s, bi) => s + bankData[bi].rwuTotalWatts, 0);
+    const psuLoadWatts    = g.banks.reduce((s, bi) => s + bankData[bi].psuLoadWatts, 0);  // show
+    const psAmpsWorst     = g.psuLoadWattsWorst / VOLTS;
+    const psAmps          = psuLoadWatts / VOLTS;
+    // Ampacity check uses WORST current (safety critical)
+    const vdropPigtail    = pigtailOn ? psAmpsWorst * pigtailRes * 2 * pigtailLen : 0;
+    const pigtailOk       = pigtailOn ? psAmpsWorst <= pigtailAmpacity : true;
     return {
       ...g, psNum:i+1,
-      totalWatts, rwuTotalWatts,  // for display
-      psAmps, vdropPigtail, pigtailOk,
-      acDraw:  g.psuLoadWatts / ps.efficiency,
-      acAmps:  g.psuLoadWatts / ps.efficiency / acV,
-      loadPct: g.psuLoadWatts / usableWatts * 100,
+      totalWatts, totalWattsWorst, rwuTotalWatts,  // for display
+      psuLoadWatts,  // show-basis PSU load for display
+      psAmps, psAmpsWorst, vdropPigtail, pigtailOk,
+      acDraw:  g.psuLoadWattsWorst / ps.efficiency,
+      acAmps:  g.psuLoadWattsWorst / ps.efficiency / acV,
+      loadPct: g.psuLoadWattsWorst / usableWatts * 100,
     };
   });
 
@@ -3959,11 +4036,10 @@ function _calculateController() {
 
   // ── Bank rows ─────────────────────────────────────────────────────────────
   const bankRows = bankData.map(b => {
-    const anyOver  = b.bankOver || b.portOver;
-    // Three-state severity: hardOver = theoretical AND RWU both over; softOver = theoretical only
-    const hardOver = (b.portOver && b.rwuPortOver) || (b.bankOver && b.rwuBankOver);
-    const softOver = anyOver && !hardOver;
-    const badgeClass = hardOver ? 'badge-danger' : softOver ? 'badge-warn' : 'badge-ok';
+    // portOver/bankOver are now worst-case basis — anything over is a hard fail.
+    // Wiring ampacity failures also hard-fail the bank row.
+    const anyFail = b.bankOver || b.portOver || b.anyCtoEOver || b.anyExtOver;
+    const badgeClass = anyFail ? 'badge-danger' : 'badge-ok';
     // Per-port detail sub-rows (only in per-port mode)
     let portDetail = '';
     if (mode === 'port') {
@@ -3972,35 +4048,29 @@ function _calculateController() {
           <div style="display:flex; flex-wrap:wrap; gap:5px;">`;
       b.portPxArr.forEach((px, i) => {
         const portNum    = b.portStart + i;
-        const portAmps   = px * ampsPerPixel;
+        const portAmpsShow  = px * ampsPerPixel;
+        const portAmpsW     = px * ampsPerPixelWorst;
         const rwuPortAmpsI = px * rwuAmpsPerPx;
-        // Theoretical over flags
-        const pOver        = !!(spec.ampsPerPort && portAmps > spec.ampsPerPort);
-        const ctoEPortOverI = ctoEOn && portAmps > ctoEAmpacity;
-        const extOver      = portAmps > extAmpacity;
+        // Over flags — WORST case is the safety trigger
+        const pOver        = !!(spec.ampsPerPort && portAmpsW > spec.ampsPerPort);
+        const ctoEPortOverI = ctoEOn && portAmpsW > ctoEAmpacity;
+        const extOver      = portAmpsW > extAmpacity;
         const anyBad       = pOver || ctoEPortOverI || extOver;
-        // RWU over flags (same limits, RWU amps)
-        const rwuPOver     = !!(spec.ampsPerPort && rwuPortAmpsI > spec.ampsPerPort);
-        const rwuCtoEOver  = ctoEOn && rwuPortAmpsI > ctoEAmpacity;
-        const rwuExtOver   = rwuPortAmpsI > extAmpacity;
-        const rwuAnyBad    = rwuPOver || rwuCtoEOver || rwuExtOver;
-        // Three-state: hard = both over, soft = theoretical only
-        const chipHard = anyBad && rwuAnyBad;
-        const chipSoft = anyBad && !rwuAnyBad;
-        const chipBg    = chipHard ? 'rgba(239,68,68,.15)' : chipSoft ? 'rgba(245,158,11,.12)' : 'rgba(255,255,255,.05)';
-        const chipBorder= chipHard ? 'var(--danger)'       : chipSoft ? 'var(--warn)'          : 'var(--border)';
-        const chipColor = chipHard ? 'var(--danger)'       : chipSoft ? 'var(--warn)'          : 'var(--muted)';
-        const ctoeDropV  = portAmps * ctoERes * 2 * ctoELen;
-        const extDrop    = portAmps * extRes * 2 * extLen;
+        const chipBg    = anyBad ? 'rgba(239,68,68,.15)' : 'rgba(255,255,255,.05)';
+        const chipBorder= anyBad ? 'var(--danger)'       : 'var(--border)';
+        const chipColor = anyBad ? 'var(--danger)'       : 'var(--muted)';
+        const ctoeDropV  = portAmpsW * ctoERes * 2 * ctoELen;
+        const extDrop    = portAmpsW * extRes * 2 * extLen;
         const dropStr = [
           ctoEOn && ctoELen > 0 ? '&minus;'+ctoeDropV.toFixed(3)+'V c2e' : '',
           extLen > 0             ? '&minus;'+extDrop.toFixed(3)+'V ext'   : '',
         ].filter(Boolean).join('&thinsp;/&thinsp;');
-        const warnIcon = chipHard ? ' &#9888;' : chipSoft ? ' &#9651;' : '';
+        const warnIcon = anyBad ? ' &#9940;' : '';
         portDetail += `<span style="font-size:.72rem; padding:2px 7px; border-radius:4px;
           background:${chipBg}; border:1px solid ${chipBorder};
           color:${chipColor}; white-space:nowrap;">
-          P${portNum}: ${px}px&thinsp;/&thinsp;${portAmps.toFixed(2)}A<span style="color:var(--ok);">&thinsp;(~${rwuPortAmpsI.toFixed(2)}A)</span>${dropStr?'&thinsp;/&thinsp;'+dropStr:''}${warnIcon}
+          P${portNum}: ${px}px&thinsp;/&thinsp;<strong>${portAmpsW.toFixed(2)}A @100%</strong>
+          <span style="color:var(--muted);">(show ${portAmpsShow.toFixed(2)}A, RWU ~${rwuPortAmpsI.toFixed(2)}A)</span>${dropStr?'&thinsp;/&thinsp;'+dropStr:''}${warnIcon}
         </span>`;
       });
       portDetail += `</div></td></tr>`;
@@ -4010,42 +4080,50 @@ function _calculateController() {
     <td style="color:var(--muted); font-size:.8rem;">Ports ${b.portStart}&ndash;${b.portEnd}</td>
     <td>${b.pixPerPortLabel}</td>
     <td>${b.totalPx.toLocaleString()}</td>
-    <td>${b.totalAmps.toFixed(2)} A
+    <td>
+      <strong style="color:${b.bankOver?'var(--danger)':'var(--text)'};">${b.totalAmpsWorst.toFixed(2)} A</strong>
+      <span style="font-size:.7rem; color:var(--muted);">@100%</span>
+      <br><span style="font-size:.72rem; color:var(--muted);">Show @ ${Math.round(brightness*100)}%: ${b.totalAmps.toFixed(2)}A</span>
       <br><span style="font-size:.72rem; color:var(--ok);">RWU ~${b.rwuTotalAmps.toFixed(2)}A</span>
       ${spec.ampsPerPort ? (() => {
-        const portSoft = b.portOver && !b.rwuPortOver;
-        const portHard = b.portOver && b.rwuPortOver;
-        const portCol  = portHard ? 'var(--danger)' : portSoft ? 'var(--warn)' : 'var(--muted)';
-        return `<br><span style="font-size:.72rem; color:${portCol};">${b.maxPortAmps.toFixed(2)}A max/port (limit ${spec.ampsPerPort}A)<br>RWU ~${b.rwuMaxPortAmps.toFixed(2)}A/port</span>`;
-      })() : ''}</td>
-    <td>${b.totalWatts.toFixed(1)} W
-      <br><span style="font-size:.72rem; color:var(--ok);">RWU ~${b.rwuTotalWatts.toFixed(1)}W</span></td>
+        const portCol = b.portOver ? 'var(--danger)' : 'var(--muted)';
+        return `<br><span style="font-size:.72rem; color:${portCol};"><strong>${b.maxPortAmpsWorst.toFixed(2)}A max/port @100%</strong> (limit ${spec.ampsPerPort}A)</span>`;
+      })() : ''}
+    </td>
+    <td>
+      <strong>${b.totalWattsWorst.toFixed(1)} W</strong>
+      <span style="font-size:.7rem; color:var(--muted);">@100%</span>
+      <br><span style="font-size:.72rem; color:var(--muted);">Show: ${b.totalWatts.toFixed(1)}W</span>
+      <br><span style="font-size:.72rem; color:var(--ok);">RWU ~${b.rwuTotalWatts.toFixed(1)}W</span>
+    </td>
     <td>${(ctoEOn || extLen > 0)
       ? `${b.maxPortDrop.toFixed(3)}V max<br>
-         ${ctoEOn ? `<span style="font-size:.71rem;color:${b.anyCtoEOver?'var(--danger)':'var(--muted)'};">Ctrl&#8594;Ext: &minus;${b.maxCtoEDrop.toFixed(3)}V ${b.anyCtoEOver?' &#9888; over '+ctoEAmpacity+'A':''}</span><br>` : ''}
-         ${extLen > 0 ? `<span style="font-size:.71rem;color:${b.anyExtOver?'var(--danger)':'var(--muted)'};">Ext: &minus;${b.maxExtDrop.toFixed(3)}V ${b.anyExtOver?' &#9888; over '+extAmpacity+'A':''}</span>` : ''}`
+         ${ctoEOn ? `<span style="font-size:.71rem;color:${b.anyCtoEOver?'var(--danger)':'var(--muted)'};">Ctrl&#8594;Ext: &minus;${b.maxCtoEDrop.toFixed(3)}V ${b.anyCtoEOver?'&#9940; FAIL &gt;'+ctoEAmpacity+'A':''}</span><br>` : ''}
+         ${extLen > 0 ? `<span style="font-size:.71rem;color:${b.anyExtOver?'var(--danger)':'var(--muted)'};">Ext: &minus;${b.maxExtDrop.toFixed(3)}V ${b.anyExtOver?'&#9940; FAIL &gt;'+extAmpacity+'A':''}</span>` : ''}`
       : '<span style="color:var(--muted);font-size:.8rem;">—</span>'}</td>
     <td><span class="badge ${badgeClass}">
       ${(() => {
-        const warnings = [];
-        // Check port limit
+        const fails = [];
         if (b.portOver) {
-          warnings.push('&#9888; '+b.maxPortAmps.toFixed(2)+'A/port EXCEEDS '+spec.ampsPerPort+'A limit'
-            +(b.rwuPortOver
-              ? ' &mdash; RWU also over (~'+b.rwuMaxPortAmps.toFixed(2)+'A)'
-              : ' &mdash; RWU OK (~'+b.rwuMaxPortAmps.toFixed(2)+'A)'));
+          const fix = recommendedGauge(b.maxPortAmpsWorst);
+          fails.push('&#9940; <strong>FAIL</strong> &mdash; '+b.maxPortAmpsWorst.toFixed(2)+'A/port @100% exceeds '+spec.ampsPerPort+'A fuse'
+            +'<br><span style="font-size:.7rem; opacity:.9;">Fix: reduce px/port, or use a controller with higher port fuse rating</span>');
         }
-        // Check bank limit
         if (b.bankOver) {
-          warnings.push('&#9888; '+b.totalAmps.toFixed(2)+'A EXCEEDS '+spec.maxAmpsPerBank+'A bank limit'
-            +(b.rwuBankOver
-              ? ' &mdash; RWU also over (~'+b.rwuTotalAmps.toFixed(2)+'A)'
-              : ' &mdash; RWU OK (~'+b.rwuTotalAmps.toFixed(2)+'A)'));
+          fails.push('&#9940; <strong>FAIL</strong> &mdash; '+b.totalAmpsWorst.toFixed(2)+'A @100% exceeds '+spec.maxAmpsPerBank+'A bank terminal'
+            +'<br><span style="font-size:.7rem; opacity:.9;">Fix: redistribute pixels across more banks or lower px/port</span>');
         }
-        // Return combined warnings or OK message
-        return warnings.length > 0
-          ? warnings.join('<br>')
-          : 'OK &mdash; within '+spec.maxAmpsPerBank+'A bank / '+(spec.ampsPerPort?spec.ampsPerPort+'A port':'—');
+        if (b.anyCtoEOver) {
+          const fix = recommendedGauge(b.portExtData.reduce((m,p)=>Math.max(m,p.portAmpsWorst),0));
+          fails.push('&#9940; <strong>FAIL</strong> &mdash; Ctrl&#8594;Ext '+ctoEGauge+' AWG over '+ctoEAmpacity+'A at 100%. Upsize to '+fix+' AWG.');
+        }
+        if (b.anyExtOver) {
+          const fix = recommendedGauge(b.portExtData.reduce((m,p)=>Math.max(m,p.portAmpsWorst),0));
+          fails.push('&#9940; <strong>FAIL</strong> &mdash; Extension '+extGauge+' AWG over '+extAmpacity+'A at 100%. Upsize to '+fix+' AWG.');
+        }
+        return fails.length > 0
+          ? fails.join('<br>')
+          : 'OK &mdash; within '+spec.maxAmpsPerBank+'A bank / '+(spec.ampsPerPort?spec.ampsPerPort+'A port':'—')+' at 100% white';
       })()}
     </span></td>
   </tr>${portDetail}`;
@@ -4054,36 +4132,33 @@ function _calculateController() {
   // ── PS allocation rows ────────────────────────────────────────────────────
   const injReducesPsu = document.getElementById('ctrlInjReducesPsuLoad').checked;
   const psRows = psGroupData.map(g => {
-    const psuLoadDiff = g.totalWatts !== g.psuLoadWatts;
+    const psuLoadWattsWorst = g.psuLoadWattsWorst;
     const rwuPsuWatts = g.banks.reduce((s, bi) => s + bankData[bi].rwuPsuLoadWatts, 0);
-    const rwuOverloaded = rwuPsuWatts > usableWatts;
-    // Three-state: hard = both over, soft = theoretical only
-    const hardOver = g.overloaded && rwuOverloaded;
-    const softOver = g.overloaded && !rwuOverloaded;
-    const statusBadge = hardOver ? 'badge-danger' : softOver ? 'badge-warn' : 'badge-ok';
+    // Worst-case overload is the safety trigger → hard fail
+    const anyFail = g.overloaded || !g.pigtailOk;
+    const statusBadge = anyFail ? 'badge-danger' : 'badge-ok';
     return `<tr>
     <td><strong>PSU ${g.psNum}</strong></td>
     <td>Bank${g.banks.length>1?'s':''}&nbsp;${g.banks.map(b=>b+1).join(', ')}</td>
     <td>
-      ${(g.psuLoadWatts/VOLTS).toFixed(2)}A &mdash; ${g.psuLoadWatts.toFixed(1)}W DC
-      ${psuLoadDiff
-        ? `<br><span style="font-size:.7rem; color:var(--muted);">Total: ${g.totalWatts.toFixed(1)}W (injection reduces PSU load)</span>`
-        : ''}
+      <strong style="color:${g.overloaded?'var(--danger)':'var(--text)'};">${g.psAmpsWorst.toFixed(2)}A / ${psuLoadWattsWorst.toFixed(1)}W</strong>
+      <span style="font-size:.7rem; color:var(--muted);">@100%</span>
+      <br><span style="font-size:.7rem; color:var(--muted);">Show @ ${Math.round(brightness*100)}%: ${g.psAmps.toFixed(2)}A / ${g.psuLoadWatts.toFixed(1)}W</span>
       <br><span style="font-size:.72rem; color:var(--ok);">RWU ~${(rwuPsuWatts/VOLTS).toFixed(2)}A / ${rwuPsuWatts.toFixed(1)}W</span>
     </td>
-    <td><span class="badge ${g.overloaded?'badge-danger':g.loadPct>90?'badge-warn':'badge-ok'}">${g.loadPct.toFixed(0)}%</span></td>
-    ${pigtailOn ? `<td>${g.vdropPigtail.toFixed(3)}V
+    <td><span class="badge ${g.overloaded?'badge-danger':g.loadPct>90?'badge-warn':'badge-ok'}">${g.loadPct.toFixed(0)}% @100%</span></td>
+    ${pigtailOn ? `<td>${g.vdropPigtail.toFixed(3)}V @100%
       <br><span style="font-size:.72rem;color:${g.pigtailOk?'var(--muted)':'var(--danger)'};">
-        ${g.psAmps.toFixed(2)}A on ${pigtailGauge} AWG${g.pigtailOk?'':' &#9888; over '+pigtailAmpacity+'A'}
+        ${g.psAmpsWorst.toFixed(2)}A on ${pigtailGauge} AWG${g.pigtailOk?'':'<br>&#9940; FAIL &mdash; upsize to '+recommendedGauge(g.psAmpsWorst)+' AWG'}
       </span></td>` : ''}
     <td>${g.acDraw.toFixed(1)}W / ${g.acAmps.toFixed(2)}A @ ${acV}V</td>
     <td><span class="badge ${statusBadge}">${
-      g.overloaded
-        ? '&#9888; '+g.psuLoadWatts.toFixed(1)+'W exceeds PS capacity'
-          +(rwuOverloaded
-            ? ' &mdash; RWU also over (~'+rwuPsuWatts.toFixed(1)+'W) &mdash; upgrade PS or split bank'
-            : ' &mdash; RWU OK (~'+rwuPsuWatts.toFixed(1)+'W)')
-        : 'OK'
+      (() => {
+        const fails = [];
+        if (g.overloaded) fails.push('&#9940; <strong>FAIL</strong> &mdash; '+psuLoadWattsWorst.toFixed(1)+'W @100% exceeds '+usableWatts.toFixed(0)+'W usable<br><span style="font-size:.7rem; opacity:.9;">Fix: split this bank onto a dedicated PSU, or move to a larger PS model</span>');
+        if (!g.pigtailOk) fails.push('&#9940; <strong>FAIL</strong> &mdash; PSU&#8594;Ctrl '+pigtailGauge+' AWG carries '+g.psAmpsWorst.toFixed(2)+'A, rated '+pigtailAmpacity+'A. Upsize to '+recommendedGauge(g.psAmpsWorst)+' AWG.');
+        return fails.length ? fails.join('<br>') : 'OK at 100% white';
+      })()
     }</span></td>
   </tr>`;
   }).join('');
@@ -4115,13 +4190,17 @@ function _calculateController() {
       <div class="card">
         <div class="card-title">Total Pixels (all ports)</div>
         <div class="card-value">${totalPx.toLocaleString()}</div>
-        <div class="card-unit">${VOLTS}V pixels, ${Math.round(brightness*100)}% brightness</div>
+        <div class="card-unit">${VOLTS}V pixels &bull; show tops at ${Math.round(brightness*100)}% brightness</div>
         <div class="card-detail">
-          <strong>Total DC load (theoretical):</strong> ${totalDCWatts.toFixed(1)}W / ${(totalDCWatts/VOLTS).toFixed(2)}A<br>
-          <span style="color:var(--ok); font-size:.82rem;">&#9654; RWU est. (${Math.round(rwuFactor*100)}%):</span>
-          <span style="color:var(--ok); font-size:.82rem;"> ${rwuTotalDCWatts.toFixed(1)}W / ${(rwuTotalDCWatts/VOLTS).toFixed(2)}A</span><br>
-          <strong>Per pixel @ ${Math.round(brightness*100)}%:</strong> ${(ampsPerPixel*1000).toFixed(1)}mA / ${(wattsPerPixel*brightness).toFixed(3)}W<br>
-          <span style="color:var(--ok); font-size:.8rem;">RWU per px: ${(rwuAmpsPerPx*1000).toFixed(1)}mA / ${(wattsPerPixel*brightness*rwuFactor).toFixed(3)}W</span><br>
+          <strong style="color:var(--danger);">Worst case (100% white):</strong>
+          ${totalDCWattsWorst.toFixed(1)}W / ${(totalDCWattsWorst/VOLTS).toFixed(2)}A<br>
+          <span style="font-size:.82rem; color:var(--muted);">
+            Your show @ ${Math.round(brightness*100)}%: ${totalDCWatts.toFixed(1)}W / ${(totalDCWatts/VOLTS).toFixed(2)}A<br>
+          </span>
+          <span style="color:var(--ok); font-size:.82rem;">RWU est. (${Math.round(rwuFactor*100)}%):
+            ${rwuTotalDCWatts.toFixed(1)}W / ${(rwuTotalDCWatts/VOLTS).toFixed(2)}A</span><br>
+          <strong>Per pixel @ 100%:</strong> ${(ampsPerPixelWorst*1000).toFixed(1)}mA / ${wattsPerPixel.toFixed(3)}W
+          <span style="color:var(--muted); font-size:.78rem;">(show: ${(ampsPerPixel*1000).toFixed(1)}mA)</span><br>
           <strong>Port config:</strong> ${mode === 'port' ? 'Per-port (individual)' : mode === 'bank' ? 'Per-bank (varies)' : defaultPxPort+' px/port uniform'}
         </div>
       </div>
@@ -4129,15 +4208,19 @@ function _calculateController() {
       <div class="card ${numPS > 12 ? 'warn':'ok'}">
         <div class="card-title">Power Supplies Required</div>
         <div class="card-value">${numPS}</div>
-        <div class="card-unit">${ps.name}</div>
+        <div class="card-unit">${ps.name} &bull; sized for 100% white</div>
         <div class="card-detail">
           <strong>Rated:</strong> ${ps.watts}W / ${ps.volts}V / ${ps.amps}A<br>
           <strong>Usable (${Math.round(psDerate*100)}%):</strong> ${usableWatts.toFixed(0)}W / ${usableAmps.toFixed(1)}A<br>
-          <strong>Avg load/PSU:</strong> ${numPS ? (totalDCWatts/numPS).toFixed(1)+'W ('+((totalDCWatts/numPS)/usableWatts*100).toFixed(0)+'%)' : '—'}<br>
-          <span style="color:var(--ok); font-size:.82rem;">&#9654; RWU est. (${Math.round(rwuFactor*100)}%):
+          <strong style="color:var(--danger);">Worst case:</strong>
+            ${numPS} PSU${numPS!==1?'s':''} &mdash; avg ${numPS ? (totalDCWattsWorst/numPS).toFixed(1)+'W ('+((totalDCWattsWorst/numPS)/usableWatts*100).toFixed(0)+'%)' : '—'}<br>
+          <span style="font-size:.82rem; color:var(--muted);">
+            Your show @ ${Math.round(brightness*100)}%: <strong style="color:var(--text);">${showNumPS} PSU${showNumPS!==1?'s':''}</strong>
+            ${showNumPS < numPS ? '&nbsp;&mdash; <span style="color:var(--warn);">'+((numPS-showNumPS))+' short if any effect hits full white</span>' : ''}<br>
+          </span>
+          <span style="color:var(--ok); font-size:.82rem;">RWU est. (${Math.round(rwuFactor*100)}%):
             <strong style="color:var(--ok);">${rwuNumPS} PSU${rwuNumPS!==1?'s':''}</strong>
             &mdash; avg ${rwuAvgLoadPerPS.toFixed(1)}W (${usableWatts>0?(rwuAvgLoadPerPS/usableWatts*100).toFixed(0):'—'}% load)
-            ${rwuNumPS < numPS ? '<span style="color:var(--muted); font-size:.78rem;">&nbsp;(saves '+(numPS-rwuNumPS)+' PSU'+(numPS-rwuNumPS>1?'s':'')+')</span>' : ''}
           </span>
         </div>
       </div>
@@ -4163,29 +4246,29 @@ function _calculateController() {
         <div class="card-value" style="font-size:1.4rem;">
           ${(maxPigtailDrop + maxCtoEDrop + maxExtDrop).toFixed(3)}<span style="font-size:1rem;">V</span>
         </div>
-        <div class="card-unit">worst-case total (all wiring segments)</div>
+        <div class="card-unit">worst-case total (100% white across all wiring)</div>
         <div class="card-detail">
           ${pigtailOn
             ? `<strong>PSU&#8594;Ctrl (${pigtailGauge} AWG, ${pigtailLen} ft):</strong>
                &minus;${maxPigtailDrop.toFixed(3)}V max<br>
                <span style="font-size:.76rem; color:var(--muted);">
-                 Highest-loaded PSU: ${Math.max(...psGroupData.map(g=>g.psAmps)).toFixed(2)}A
-                 ${psGroupData.some(g=>!g.pigtailOk)?'<span style="color:var(--danger)"> &#9888; Exceeds '+pigtailAmpacity+'A ampacity</span>':''}
+                 Highest-loaded PSU @ 100%: <strong style="color:var(--text);">${Math.max(...psGroupData.map(g=>g.psAmpsWorst)).toFixed(2)}A</strong>
+                 ${psGroupData.some(g=>!g.pigtailOk)?'<br><span style="color:var(--danger); font-weight:600;">&#9940; FAIL &mdash; exceeds '+pigtailAmpacity+'A ampacity. Upsize to '+recommendedGauge(Math.max(...psGroupData.map(g=>g.psAmpsWorst)))+' AWG or split onto more PSUs.</span>':''}
                </span><br>`
             : '<span style="color:var(--muted);">No PSU&#8594;Ctrl wire included</span><br>'}
           ${ctoEOn
             ? `<strong>Ctrl&#8594;Ext (${ctoEGauge} AWG, ${ctoELen} ft):</strong>
                &minus;${maxCtoEDrop.toFixed(3)}V max<br>
                <span style="font-size:.76rem; color:var(--muted);">
-                 Highest port: ${maxPortAmps.toFixed(2)}A
-                 ${bankData.some(b=>b.anyCtoEOver)?'<span style="color:var(--danger)"> &#9888; Exceeds '+ctoEAmpacity+'A ampacity on some ports</span>':''}
+                 Highest port @ 100%: <strong style="color:var(--text);">${maxPortAmpsWorst.toFixed(2)}A</strong>
+                 ${bankData.some(b=>b.anyCtoEOver)?'<br><span style="color:var(--danger); font-weight:600;">&#9940; FAIL &mdash; exceeds '+ctoEAmpacity+'A ampacity on some ports. Upsize to '+recommendedGauge(maxPortAmpsWorst)+' AWG.</span>':''}
                </span><br>`
             : '<span style="color:var(--muted);">No Ctrl&#8594;Ext wire included</span><br>'}
           <strong>Extension (${extGauge} AWG, ${extLen} ft):</strong>
           &minus;${maxExtDrop.toFixed(3)}V max<br>
           <span style="font-size:.76rem; color:var(--muted);">
-            Highest port: ${maxPortAmps.toFixed(2)}A
-            ${bankData.some(b=>b.anyExtOver)?'<span style="color:var(--danger)"> &#9888; Exceeds '+extAmpacity+'A ampacity on some ports</span>':''}
+            Highest port @ 100%: <strong style="color:var(--text);">${maxPortAmpsWorst.toFixed(2)}A</strong>
+            ${bankData.some(b=>b.anyExtOver)?'<br><span style="color:var(--danger); font-weight:600;">&#9940; FAIL &mdash; exceeds '+extAmpacity+'A ampacity on some ports. Upsize to '+recommendedGauge(maxPortAmpsWorst)+' AWG.</span>':''}
           </span>
         </div>
       </div>
@@ -4193,9 +4276,11 @@ function _calculateController() {
       <div class="card ${totalPortsNeedInj > 0 ? 'warn' : 'ok'}">
         <div class="card-title">Power Injection Needed</div>
         <div class="card-value">${totalInjPoints}</div>
-        <div class="card-unit">total injection point${totalInjPoints !== 1 ? 's' : ''} across all ports (theoretical)</div>
+        <div class="card-unit">injection point${totalInjPoints !== 1 ? 's' : ''} at 100% white (worst case)</div>
         <div class="card-detail">
-          <strong>${totalPortsNeedInj}</strong> of <strong>${spec.ports}</strong> ports need injection<br>
+          <strong>${totalPortsNeedInj}</strong> of <strong>${spec.ports}</strong> ports need injection at 100% white<br>
+          String wire: <strong>${stringGauge} AWG</strong>
+          <span style="color:var(--muted); font-size:.78rem;">(drives along-string drop)</span><br>
           Inj wire: <strong>${injGauge} AWG</strong> &bull;
           Spacing: <strong>${densityVal === 'custom'
             ? (parseFloat(document.getElementById('ctrlCustomSpacing').value)||4)+'"'
@@ -4203,17 +4288,14 @@ function _calculateController() {
           Seg size: <strong>${bankData[0]?.portInjData[0]?.pixPerSeg ?? '—'} px max</strong><br>
           Min pixel V: <strong>${minV}V</strong> &bull; Budget: <strong>${totalBudget.toFixed(2)}V</strong>
           ${spec.ampsPerPort
-            ? `<br><span style="color:var(--muted); font-size:.8rem;">Port fuse: <strong style="color:var(--text)">${spec.ampsPerPort}A</strong> &bull; max px/seg (fuse): <strong style="color:var(--text)">${ampsPerPixel>0?Math.floor(spec.ampsPerPort/ampsPerPixel):'—'}</strong></span>`
+            ? `<br><span style="color:var(--muted); font-size:.8rem;">Port fuse: <strong style="color:var(--text)">${spec.ampsPerPort}A</strong> &bull; max px/seg (fuse @ 100%): <strong style="color:var(--text)">${ampsPerPixelWorst>0?Math.floor(spec.ampsPerPort/ampsPerPixelWorst):'—'}</strong></span>`
             : ''}
-          <br><span style="color:var(--ok); font-size:.82rem;">&#9654; RWU est. (${Math.round(rwuFactor*100)}%):
+          <br><span style="color:var(--ok); font-size:.82rem;">RWU est. (${Math.round(rwuFactor*100)}%):
             <strong style="color:var(--ok);">${rwuTotalInjPoints} point${rwuTotalInjPoints!==1?'s':''}</strong>
             on <strong style="color:var(--ok);">${rwuTotalPortsNeedInj}</strong> port${rwuTotalPortsNeedInj!==1?'s':''}
-            ${totalInjPoints > rwuTotalInjPoints
-              ? `<span style="color:var(--muted); font-size:.78rem;">&nbsp;(saves ${totalInjPoints-rwuTotalInjPoints} injection point${totalInjPoints-rwuTotalInjPoints>1?'s':''})</span>`
-              : ''}
           </span>
           ${totalPortsNeedInj === 0
-            ? '<br><span style="color:var(--ok);">&#10003; All ports within voltage budget — no injection required</span>'
+            ? '<br><span style="color:var(--ok);">&#10003; All ports within voltage budget at 100% white</span>'
             : ''}
         </div>
       </div>
@@ -4256,8 +4338,8 @@ function _calculateController() {
                 padding-bottom:4px; border-bottom:1px solid ${bColour}33;">
                 Bank ${b.bankNum} &mdash; Ports ${b.portStart}&ndash;${b.portEnd}
                 ${hasInj
-                  ? '<span style="background:rgba(245,158,11,.15); color:var(--warn); font-size:.7rem; padding:1px 7px; border-radius:4px; margin-left:6px;">'+b.portsNeedInj+' port'+(b.portsNeedInj>1?'s':'')+' need injection</span>'
-                  : '<span style="background:rgba(34,197,94,.12); color:var(--ok); font-size:.7rem; padding:1px 7px; border-radius:4px; margin-left:6px;">&#10003; no injection needed</span>'}
+                  ? '<span style="background:rgba(245,158,11,.15); color:var(--warn); font-size:.7rem; padding:1px 7px; border-radius:4px; margin-left:6px;">'+b.portsNeedInj+' port'+(b.portsNeedInj>1?'s':'')+' need injection @ 100%</span>'
+                  : '<span style="background:rgba(34,197,94,.10); color:var(--ok); font-size:.7rem; padding:1px 7px; border-radius:4px; margin-left:6px;">within budget @ 100% white</span>'}
                 ${rwuHasInj
                   ? '<span style="background:rgba(34,197,94,.10); color:var(--ok); font-size:.7rem; padding:1px 7px; border-radius:4px; margin-left:4px;">RWU: '+b.rwuPortsNeedInj+' port'+(b.rwuPortsNeedInj>1?'s':'')+' need injection</span>'
                   : '<span style="background:rgba(34,197,94,.10); color:var(--ok); font-size:.7rem; padding:1px 7px; border-radius:4px; margin-left:4px;">RWU &#10003; none needed</span>'}
@@ -4433,13 +4515,59 @@ function _calculateController() {
       </span>
     </div>
 
+    <!-- ── BUILD INTERPRETATION — advisory, not verdict ─────────────── -->
+    <div style="padding:14px 18px; background:rgba(79,142,247,.07);
+      border:1px solid rgba(79,142,247,.25); border-radius:10px;
+      font-size:.85rem; color:var(--text); line-height:1.75; margin-bottom:12px;">
+      <div style="font-size:.95rem; font-weight:700; color:var(--accent); margin-bottom:8px;">
+        &#128203; Build Interpretation
+      </div>
+      <div style="color:var(--muted); font-size:.78rem; margin-bottom:10px;">
+        What a typical build at this scale would plan for. Based on the inputs above &mdash;
+        verify against your actual wire, connectors, and show brightness before finalising.
+      </div>
+      ${(() => {
+        const avgPxPort = totalPx / spec.ports;
+        const spacingIn = densityVal === 'custom'
+          ? (parseFloat(document.getElementById('ctrlCustomSpacing').value)||4)
+          : parseFloat(densityVal);
+        const lines = [];
+        // PSU line
+        if (showNumPS < numPS) {
+          lines.push(`<li><strong>${numPS} power supplies</strong> to survive 100% white moments (snow / strobes / finales). Your show @ ${Math.round(brightness*100)}% only needs ${showNumPS}, but you'd be <strong style="color:var(--warn);">${numPS-showNumPS} PSU${numPS-showNumPS>1?'s':''} short</strong> if any effect hits full white &mdash; PSUs would current-limit, pixels would brown out, and worst case a PSU could over-temp.</li>`);
+        } else {
+          lines.push(`<li><strong>${numPS} power supplies</strong> at the selected ${ps.name} with ${Math.round(psDerate*100)}% derate &mdash; this covers worst case (100% white).</li>`);
+        }
+        // String wire / injection line
+        if (totalPortsNeedInj === 0) {
+          lines.push(`<li>Injection likely <strong>not required</strong> per port at ${avgPxPort.toFixed(0)} px/port with ${spacingIn}&Prime; spacing and ${stringGauge} AWG string wire &mdash; voltage stays above ${minV}V at the far pixel even at 100% white. If your actual harness uses thinner wire (common: 24 AWG on cheap pigtails), switch the <em>String Wire Gauge</em> input and re-check.</li>`);
+        } else {
+          lines.push(`<li><strong>Plan for ${totalInjPoints} injection point${totalInjPoints>1?'s':''} across ${totalPortsNeedInj} port${totalPortsNeedInj>1?'s':''}</strong> to keep pixels above ${minV}V at 100% white. Segments of roughly ${bankData[0]?.portInjData[0]?.pixPerSeg ?? '—'} px per feed with the current ${stringGauge} AWG string wire.</li>`);
+        }
+        // Feeder gauge recommendation
+        if (pigtailOn) {
+          const worstPsu = Math.max(...psGroupData.map(g=>g.psAmpsWorst), 0);
+          const recFeeder = recommendedGauge(worstPsu);
+          const curOk = psGroupData.every(g => g.pigtailOk);
+          if (!curOk) {
+            lines.push(`<li style="color:var(--danger);"><strong>PSU&#8594;Controller feeder: ${pigtailGauge} AWG is unsafe</strong> at ${worstPsu.toFixed(2)}A worst case. Upsize to <strong>${recFeeder} AWG</strong> &mdash; OR split high-load banks onto dedicated PSUs so each feeder stays under the ${pigtailAmpacity}A rating.</li>`);
+          } else {
+            lines.push(`<li>PSU&#8594;Controller feeders: ${pigtailGauge} AWG is OK at ${worstPsu.toFixed(2)}A worst case (rated ${pigtailAmpacity}A).</li>`);
+          }
+        }
+        // AC line
+        lines.push(`<li>AC side: <strong>${numCircuits} &times; ${breakerA}A circuit${numCircuits>1?'s':''}</strong> at ${Math.round(acSafety*100)}% NEC rule covers the ${numPS} PSU${numPS>1?'s':''} worst-case draw.</li>`);
+        return `<ul style="margin:0 0 0 18px; padding:0;">${lines.join('')}</ul>`;
+      })()}
+    </div>
+
     <!-- Notes -->
     <div style="padding:12px 16px; background:rgba(245,158,11,.08); border:1px solid rgba(245,158,11,.25);
       border-radius:8px; font-size:.78rem; color:var(--muted); line-height:1.75; margin-bottom:12px;">
       <strong style="color:var(--warn)">Important:</strong>
       Per-bank terminal ratings are the board&rsquo;s stated limits &mdash; actual trace and connector specs vary by board revision; verify against your specific board documentation.
-      Controller mode calculates power sizing only &mdash; use <strong style="color:var(--text)">String Power Needs</strong> mode
-      to plan voltage drop and injection spacing for individual port runs.
+      All safety-critical numbers (PSU count, ampacity, injection) are sized for <strong style="color:var(--text)">100% white worst case</strong>.
+      The "Show" column reflects your brightness slider &mdash; useful to see the delta, but don't size wire or PSUs to it unless you're certain no effect in any sequence hits full white.
       All PSU recommendations assume the selected model at the selected derate factor.
     </div>
   `;
