@@ -447,6 +447,24 @@
       </div>
     </div>
 
+    <div class="field">
+      <label>Real World Usage (RWU) Factor <button class="info-btn" onclick="toggleTip(this,'rwuFactor')">i</button>
+        <span style="font-size:.72rem; color:var(--muted); font-weight:400;">(typical show load vs rated peak)</span>
+      </label>
+      <div class="slider-wrap">
+        <input type="range" id="rwuFactor" min="20" max="100" value="45"
+          oninput="document.getElementById('rwuFactorVal').textContent=this.value+'%'">
+        <div class="slider-val" id="rwuFactorVal">45%</div>
+      </div>
+      <div style="font-size:.72rem; color:var(--muted); margin-top:5px; line-height:1.55;
+        padding:5px 8px; background:rgba(79,142,247,.05); border-radius:5px;">
+        A sequenced Christmas show with color variety typically averages
+        <strong style="color:var(--text)">25&ndash;45%</strong> of theoretical 100% white draw.
+        Static-white or video-playback sequences land closer to <strong style="color:var(--text)">60&ndash;80%</strong>.
+        Results show both <em>peak</em> (safety-planning) and <em>RWU</em> (realistic) voltage drop.
+      </div>
+    </div>
+
     <div class="section-label">DC Wiring <button class="info-btn" onclick="toggleTip(this,'wireSection')" style="vertical-align:middle">i</button></div>
 
     <!-- Pigtail toggle -->
@@ -1512,6 +1530,13 @@ function calculate() {
   const wattsPerPS   = totalWattsDC / numPS;
   const ampsPerPS    = wattsPerPS / VOLTS;
 
+  // Real World Usage (RWU) scaling — typical colorful show sequences only draw
+  // a fraction of peak-white rated load. Used to show a second "realistic" drop
+  // alongside the peak-worst-case drop so installers aren't scared by numbers
+  // that only occur during an all-white chase.
+  const rwuFactor    = vn('rwuFactor') / 100;
+  const rwuAmpsPerPS = ampsPerPS * rwuFactor;
+
   // ── AC calculations ──────────────────────────────────────────────────────
   const acDrawPerPS  = ps.watts / ps.efficiency;
   const acAmpsPerPS  = acDrawPerPS / acV;
@@ -1532,6 +1557,12 @@ function calculate() {
   const vAtStrip    = Math.max(0, VOLTS - vdropPigtail - vdropExtension);
   const vBudgetStrip = Math.max(0, vAtStrip - minV);
   const totalBudget  = Math.max(0, VOLTS - minV);   // headroom from nominal to min (e.g. 12-11=1V)
+
+  // RWU-scaled drops (realistic show load, not peak white)
+  const rwuVdropPigtail   = rwuAmpsPerPS * pigtailRes * 2 * pigtailLen;
+  const rwuVdropExtension = rwuAmpsPerPS * extRes     * 2 * extLen;
+  const rwuVAtStrip       = Math.max(0, VOLTS - rwuVdropPigtail - rwuVdropExtension);
+  const rwuVBudgetStrip   = Math.max(0, rwuVAtStrip - minV);
 
   // Maximum extension length before the strip voltage budget is fully consumed
   // Solve:  ampsPerPS * extRes * 2 * maxExtLen = totalBudget - vdropPigtail
@@ -1659,13 +1690,44 @@ function calculate() {
       }
       fixes.push(`Increase <strong style="color:var(--text)">Min Acceptable Voltage</strong> threshold to allow more budget`);
       fixes.push(`Place the power supply closer to the pixel run (shorter extension)`);
+
+      // Branch: if RWU-adjusted drop fits inside the budget, this is only a
+      // worst-case-white concern, not a sequence-running concern.
+      if (rwuVBudgetStrip > 0) {
+        return `<div style="padding:12px 14px; background:rgba(245,158,11,.08); border:1px solid rgba(245,158,11,.35); border-radius:8px;">
+          <div style="color:var(--warn); font-weight:700; margin-bottom:8px;">&#9888; External wiring consumes the full budget <em>at peak white</em> &mdash; OK for typical show load</div>
+          <div style="font-size:.8rem; color:var(--muted); line-height:1.8;">
+            At <strong style="color:var(--text)">100% white (peak)</strong> the external wiring drops
+            <strong style="color:var(--text)">${(vdropPigtail + vdropExtension).toFixed(3)}V</strong>,
+            exceeding the <strong style="color:var(--text)">${totalBudget.toFixed(3)}V</strong> budget
+            (${VOLTS}V supply &minus; ${minV}V minimum).
+            <br><br>
+            At <strong style="color:var(--ok)">${Math.round(rwuFactor*100)}% RWU (typical colourful sequence)</strong>
+            the drop is only <strong style="color:var(--ok)">${(rwuVdropPigtail + rwuVdropExtension).toFixed(3)}V</strong>,
+            leaving <strong style="color:var(--ok)">${rwuVBudgetStrip.toFixed(3)}V</strong> for strip injection.
+            <br><br>
+            <strong style="color:var(--text);">Interpretation:</strong> safe for a mixed-colour animated show;
+            <strong style="color:var(--warn)">unsafe for sustained all-white chases, static white, or video-playback sequences</strong>
+            which can approach peak draw. If you run any of those, treat this as the critical case and apply a fix below.
+            <br><br>
+            <strong style="color:var(--text);">To make it safe at peak white (try any of these):</strong>
+            <ul style="margin:6px 0 0 16px; line-height:2;">
+              ${fixes.map(f => `<li>${f}</li>`).join('')}
+            </ul>
+          </div>
+        </div>`;
+      }
+
       return `<div style="padding:12px 14px; background:rgba(239,68,68,.08); border:1px solid rgba(239,68,68,.3); border-radius:8px;">
         <div style="color:var(--danger); font-weight:700; margin-bottom:8px;">&#9888; External wiring consumes the entire voltage budget</div>
         <div style="font-size:.8rem; color:var(--muted); line-height:1.8;">
           The external wiring drops <strong style="color:var(--text)">${(vdropPigtail + vdropExtension).toFixed(3)}V</strong>
           but your total budget is only <strong style="color:var(--text)">${totalBudget.toFixed(3)}V</strong>
           (${VOLTS}V supply &minus; ${minV}V minimum).
-          There is <strong style="color:var(--danger)">no voltage margin left</strong> for the strip — pixels will run below minimum spec at any load.
+          There is <strong style="color:var(--danger)">no voltage margin left</strong> for the strip &mdash; even at
+          <strong style="color:var(--text)">${Math.round(rwuFactor*100)}% RWU</strong>
+          the drop is <strong style="color:var(--text)">${(rwuVdropPigtail + rwuVdropExtension).toFixed(3)}V</strong>,
+          still exceeding the budget. Pixels will run below minimum spec at any realistic load.
           <br><br><strong style="color:var(--text);">To fix (try any of these):</strong>
           <ul style="margin:6px 0 0 16px; line-height:2;">
             ${fixes.map(f => `<li>${f}</li>`).join('')}
@@ -1789,9 +1851,18 @@ function calculate() {
               : `<span style="color:var(--muted)">Pigtail: not included</span><br>`}
             Extension (${extGauge} AWG, ${extLen} ft): &minus;${vdropExtension.toFixed(3)}V &nbsp;[${totalBudget > 0 ? ((vdropExtension/totalBudget)*100).toFixed(0) : '—'}% of budget] ${extBadge}
           </div>
+          <div style="margin:5px 0 5px 8px; padding:6px 10px; background:rgba(34,197,94,.06); border-left:2px solid var(--ok); border-radius:0 5px 5px 0; font-size:.76rem; line-height:1.85;">
+            <span style="color:var(--ok); font-weight:700;">&#9654; RWU est. (${Math.round(rwuFactor*100)}%):</span>
+            ${pigtailOn
+              ? `Pigtail: &minus;${rwuVdropPigtail.toFixed(3)}V &nbsp;&middot;&nbsp;`
+              : ''}
+            Extension: &minus;${rwuVdropExtension.toFixed(3)}V &nbsp;&middot;&nbsp;
+            arrives at pixel 1: <strong style="color:var(--text)">${rwuVAtStrip.toFixed(2)}V</strong>
+            <span style="color:var(--muted);"> (realistic show load — mixed colours average ${Math.round(rwuFactor*100)}% of peak white)</span>
+          </div>
           <strong>Remaining for strip injection:</strong>
           <span style="color:${vBudgetStrip > 0 ? 'var(--ok)' : 'var(--danger)'}; font-weight:700;"> ${vBudgetStrip.toFixed(3)}V</span>
-          ${totalBudget > 0 ? `<span style="color:var(--muted); font-size:.75rem;"> (${((vBudgetStrip/totalBudget)*100).toFixed(0)}% of budget left)</span>` : ''}
+          ${totalBudget > 0 ? `<span style="color:var(--muted); font-size:.75rem;"> (${((vBudgetStrip/totalBudget)*100).toFixed(0)}% of budget left at peak; <span style="color:var(--ok);">${rwuVBudgetStrip.toFixed(3)}V</span> at RWU)</span>` : ''}
           ${vBudgetStrip <= 0 && isFinite(maxExtLen)
             ? `<br><span style="color:var(--warn); font-size:.76rem;">&#9888; Max ${extGauge} AWG extension length: <strong style="color:var(--text)">${maxExtLen.toFixed(1)} ft</strong> before budget is exhausted</span>`
             : isFinite(maxExtLen) ? `<br><span style="color:var(--muted); font-size:.76rem;">Max ${extGauge} AWG extension before budget gone: <strong style="color:var(--text)">${maxExtLen.toFixed(1)} ft</strong></span>` : ''}
@@ -2039,6 +2110,36 @@ const TIPS = {
       &bull; Full white scenes / chases: closer to <strong>80–100%</strong>.<br>
       &bull; Power and current scale linearly: 50% brightness ≈ 50% power.<br>
       <strong style="color:#f59e0b;">Size your wiring for the brightness you plan to run.</strong>
+    </div>`
+  },
+  rwuFactor: {
+    title: 'Real World Usage (RWU) Factor',
+    body: `<div class="tip-section">
+      <div class="tip-section-head">What this is</div>
+      RWU is the <strong>typical fraction of peak-white current</strong> a sequence actually draws.
+      Pixels only hit 100% white when all three colour channels are fully on at the same time.
+      Christmas shows run colour sequences, so average draw is dramatically lower than the nameplate worst case.
+    </div>
+    <div class="tip-section">
+      <div class="tip-section-head">What to set it to</div>
+      &bull; <strong>25–45%</strong> &mdash; colourful animated xLights sequences (typical Christmas show).<br>
+      &bull; <strong>45–60%</strong> &mdash; mixed shows with some bright-white chases.<br>
+      &bull; <strong>60–80%</strong> &mdash; heavy white content, pixel-mapped video, sustained bright scenes.<br>
+      &bull; <strong>100%</strong> &mdash; worst-case test pattern / static all-white.
+    </div>
+    <div class="tip-section">
+      <div class="tip-section-head">Why two voltage drops are shown</div>
+      <strong>Peak drop</strong> is what the wire has to <em>survive</em> if someone fires an all-white chase &mdash;
+      it's the safety-planning number.<br>
+      <strong>RWU drop</strong> is what the wire will <em>actually see</em> during the show &mdash;
+      it's the realistic number.<br>
+      A result that looks alarming at peak but fine at RWU usually means: safe for colour sequences,
+      risky for sustained white content.
+    </div>
+    <div class="tip-section">
+      <div class="tip-section-head">Note &mdash; this affects the drop display, not the PS sizing</div>
+      Power supplies are still sized for peak so the show can't brown out. RWU only recolours the
+      external-wiring drop display so you can tell "red alarm" from "yellow caution".
     </div>`
   },
   wireSection: {
