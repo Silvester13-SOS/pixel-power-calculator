@@ -1791,13 +1791,23 @@ function disableAutofill() {
   });
 }
 
+function _collectSidebarState() {
+  const state = {};
+  _allSidebarFields().forEach(el => {
+    state[el.id] = (el.type === 'checkbox' || el.type === 'radio') ? el.checked : el.value;
+  });
+  return state;
+}
+
+function _applySidebarState(state) {
+  _allSidebarFields().forEach(el => {
+    if (Object.prototype.hasOwnProperty.call(state, el.id)) _applyValue(el, state[el.id]);
+  });
+}
+
 function saveFormCache() {
   try {
-    const state = {};
-    _allSidebarFields().forEach(el => {
-      state[el.id] = (el.type === 'checkbox' || el.type === 'radio') ? el.checked : el.value;
-    });
-    localStorage.setItem(FORM_CACHE_KEY, JSON.stringify(state));
+    localStorage.setItem(FORM_CACHE_KEY, JSON.stringify(_collectSidebarState()));
   } catch (e) { /* private-mode denies storage — silent no-op */ }
 }
 
@@ -1805,11 +1815,74 @@ function loadFormCache() {
   try {
     const raw = localStorage.getItem(FORM_CACHE_KEY);
     if (!raw) return;
-    const state = JSON.parse(raw);
-    _allSidebarFields().forEach(el => {
-      if (Object.prototype.hasOwnProperty.call(state, el.id)) _applyValue(el, state[el.id]);
-    });
+    _applySidebarState(JSON.parse(raw));
   } catch (e) { /* ignore corrupt cache */ }
+}
+
+// ── Shareable build links (URL hash fragment) ──────────────────────────────
+// Lets a user copy a URL that encodes their current sidebar inputs + active
+// tab so they can paste it in a DM / FB comment. Useful for triaging reports
+// of "the tool is giving a weird number" — the maintainer loads the link and
+// sees exactly what the reporter entered.
+function _currentTabKey() {
+  // Determine from which .mode-tab is active. Falls back to 'string'.
+  const active = document.querySelector('.mode-tab.active');
+  if (!active) return 'string';
+  if (active.id === 'modeTab2') return 'ctrl';
+  if (active.id === 'modeTab3') return 'mt';
+  return 'string';
+}
+
+function buildShareUrl() {
+  const payload = { v: 1, tab: _currentTabKey(), s: _collectSidebarState() };
+  const json = JSON.stringify(payload);
+  // URL-safe base64 of UTF-8 bytes
+  const encoded = btoa(unescape(encodeURIComponent(json)))
+    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  return `${location.origin}${location.pathname}#b=${encoded}`;
+}
+
+function loadFromHash() {
+  const h = location.hash || '';
+  if (!h.startsWith('#b=')) return false;
+  try {
+    let encoded = h.slice(3).replace(/-/g, '+').replace(/_/g, '/');
+    // pad base64
+    while (encoded.length % 4) encoded += '=';
+    const json = decodeURIComponent(escape(atob(encoded)));
+    const payload = JSON.parse(json);
+    if (!payload || !payload.s) return false;
+    _applySidebarState(payload.s);
+    if (payload.tab === 'ctrl' && typeof setMode === 'function') setMode(2);
+    else if (payload.tab === 'mt' && typeof setMode === 'function') setMode(3);
+    else if (typeof setMode === 'function') setMode(1);
+    // Persist the restored state and clear the hash so a later refresh
+    // uses the restored state via localStorage, not the (long) URL.
+    saveFormCache();
+    history.replaceState(null, '', location.pathname + location.search);
+    return true;
+  } catch (e) {
+    console.warn('Build link could not be loaded:', e);
+    return false;
+  }
+}
+
+async function copyBuildLink(btn) {
+  const url = buildShareUrl();
+  let copied = false;
+  try {
+    await navigator.clipboard.writeText(url);
+    copied = true;
+  } catch (e) {
+    // Fallback: show the URL in a prompt the user can copy manually.
+    window.prompt('Copy this link (Ctrl+C / Cmd+C):', url);
+    copied = true;
+  }
+  if (!copied || !btn) return;
+  const orig = btn.innerHTML;
+  btn.innerHTML = '&#10003; Link copied!';
+  btn.disabled = true;
+  setTimeout(() => { btn.innerHTML = orig; btn.disabled = false; }, 1800);
 }
 
 function resetTabDefaults(tabKey) {
@@ -1866,7 +1939,10 @@ function _syncDependentUI() {
 
 window.addEventListener('DOMContentLoaded', () => {
   disableAutofill();
-  loadFormCache();
+  // URL hash wins over localStorage cache — a shared build link should
+  // override whatever the user had before. If no hash, fall back to cache.
+  const hashLoaded = loadFromHash();
+  if (!hashLoaded) loadFormCache();
   _syncDependentUI();
   // Save on any change anywhere in any sidebar.
   _allSidebarFields().forEach(el => {
@@ -2112,16 +2188,31 @@ function calculate() {
   const totalRunFt = numPixels * spacingFt;
 
   // ── DC calculations ──────────────────────────────────────────────────────
-  // ampsPerPixel derived from user W/pixel input and selected voltage
+  // Three tiers:
+  //   WORST  : 100% white, brightness ignored. What the wire / PSU must survive
+  //            if a stuck effect or all-white test pattern fires.
+  //   SHOW   : at the user's brightness slider. What a sustained all-white
+  //            moment hits if the show is capped at brightness %.
+  //   RWU    : SHOW × rwuFactor. What an ammeter will read during a typical
+  //            colourful sequence (what the user measures in real life).
+  const ampsPerPixelWorst = wattsPerPixel / VOLTS;
+  const totalAmpsWorst    = numPixels * ampsPerPixelWorst;
+  const totalWattsWorst   = totalAmpsWorst * VOLTS;
+
   const ampsPerPixel = (wattsPerPixel * brightness) / VOLTS;
-  const totalAmpsDC  = numPixels * ampsPerPixel;
-  const totalWattsDC = totalAmpsDC * VOLTS;   // = numPixels * wattsPerPixel * brightness
+  const totalAmpsDC  = numPixels * ampsPerPixel;   // "show" tier (brightness-capped)
+  const totalWattsDC = totalAmpsDC * VOLTS;
 
   // Real World Usage (RWU) scaling — typical colorful show sequences only draw
   // a fraction of peak-white rated load. Used to show a second "realistic" drop
   // alongside the peak-worst-case drop so installers aren't scared by numbers
   // that only occur during an all-white chase.
   const rwuFactor    = vn('rwuFactor') / 100;
+  // Realistic show draw (ammeter reading). RWU is applied on top of the show
+  // brightness cap — brightness is the ceiling, RWU is the fraction averaged
+  // against that ceiling.
+  const totalAmpsRealistic  = totalAmpsDC * rwuFactor;
+  const totalWattsRealistic = totalAmpsRealistic * VOLTS;
 
   // ── Split load between the "main feed" (pigtail+extension initial push) and
   //    the "injection feed" when injection modeling is enabled.
@@ -2533,6 +2624,9 @@ function calculate() {
       <button class="pdf-btn" onclick="savePdf('results','pixel-string-power')">
         <span class="pdf-btn-icon">&#128196;</span> Save Build as PDF
       </button>
+      <button class="pdf-btn" onclick="copyBuildLink(this)" title="Copy a shareable URL that opens the tool with these exact inputs">
+        <span class="pdf-btn-icon">&#128279;</span> Copy Build Link
+      </button>
     </div>
 
     <!-- ── VERDICT BANNER (Batch A: #1) ───────────────────────────── -->
@@ -2567,13 +2661,27 @@ function calculate() {
 
       <div class="card">
         <div class="card-title">DC Power Required</div>
-        <div class="card-value">${totalWattsDC.toFixed(1)}</div>
-        <div class="card-unit">Watts at ${VOLTS}V DC</div>
-        <div class="card-detail">
-          <strong>Total Current:</strong> ${totalAmpsDC.toFixed(2)} A DC<br>
-          <strong>Per Pixel @ ${Math.round(brightness*100)}%:</strong> ${(ampsPerPixel * 1000).toFixed(1)} mA / ${(ampsPerPixel * VOLTS).toFixed(3)} W<br>
-          <strong>Per Pixel @ 100%:</strong> ${(wattsPerPixel/VOLTS*1000).toFixed(1)} mA / ${wattsPerPixel.toFixed(3)} W<br>
-          <strong>Supply Voltage:</strong> ${VOLTS}V DC nominal
+        <div class="card-value">${totalWattsWorst.toFixed(1)}</div>
+        <div class="card-unit">Watts at ${VOLTS}V DC &mdash; 100% white worst case</div>
+        <div class="card-detail" style="line-height:1.55;">
+          <div style="padding:5px 7px; background:rgba(239,68,68,.07); border-left:3px solid var(--danger); border-radius:4px; margin-bottom:5px;">
+            <strong style="color:var(--danger)">&#9888; Worst case (100% white):</strong>
+            <strong>${totalAmpsWorst.toFixed(2)} A</strong> / ${totalWattsWorst.toFixed(1)} W<br>
+            <span style="color:var(--muted); font-size:.72rem;">What your <em>wire and PSU must survive</em> if a stuck effect or test pattern fires</span>
+          </div>
+          <div style="padding:5px 7px; background:rgba(245,158,11,.07); border-left:3px solid var(--warn); border-radius:4px; margin-bottom:5px;">
+            <strong style="color:var(--warn)">At brightness ${Math.round(brightness*100)}% cap:</strong>
+            <strong>${totalAmpsDC.toFixed(2)} A</strong> / ${totalWattsDC.toFixed(1)} W<br>
+            <span style="color:var(--muted); font-size:.72rem;">What a <em>sustained all-white moment</em> hits inside your show</span>
+          </div>
+          <div style="padding:5px 7px; background:rgba(16,185,129,.07); border-left:3px solid var(--ok); border-radius:4px; margin-bottom:5px;">
+            <strong style="color:var(--ok)">&#128207; Realistic show draw (${Math.round(brightness*100)}% &times; ${Math.round(rwuFactor*100)}% RWU):</strong>
+            <strong>${totalAmpsRealistic.toFixed(2)} A</strong> / ${totalWattsRealistic.toFixed(1)} W<br>
+            <span style="color:var(--muted); font-size:.72rem;">What an <em>ammeter will read</em> during typical colourful sequences</span>
+          </div>
+          <div style="font-size:.72rem; color:var(--muted); margin-top:6px;">
+            Per pixel @ 100%: ${(wattsPerPixel/VOLTS*1000).toFixed(1)} mA / ${wattsPerPixel.toFixed(3)} W &middot; Supply ${VOLTS}V DC nominal
+          </div>
         </div>
       </div>
 
@@ -4223,6 +4331,9 @@ function _calculateController() {
       <button class="pdf-btn" onclick="savePdf('ctrlResults','pixel-controller-setup')">
         <span class="pdf-btn-icon">&#128196;</span> Save Build as PDF
       </button>
+      <button class="pdf-btn" onclick="copyBuildLink(this)" title="Copy a shareable URL that opens the tool with these exact inputs">
+        <span class="pdf-btn-icon">&#128279;</span> Copy Build Link
+      </button>
     </div>
     <div class="results-grid">
 
@@ -4882,6 +4993,9 @@ function _calculateMegatree() {
     <div class="result-toolbar">
       <button class="pdf-btn" onclick="savePdf('mtResults','pixel-megatree')">
         <span class="pdf-btn-icon">&#128196;</span> Save Build as PDF
+      </button>
+      <button class="pdf-btn" onclick="copyBuildLink(this)" title="Copy a shareable URL that opens the tool with these exact inputs">
+        <span class="pdf-btn-icon">&#128279;</span> Copy Build Link
       </button>
     </div>
     <div class="results-grid">
