@@ -275,6 +275,39 @@
     font-size:.8rem; line-height:1.55; color: var(--text);
   }
 
+  /* Voltage-drop SVG diagram (Batch C: #7) */
+  .vdrop-diagram-wrap {
+    padding: 14px 10px 6px;
+  }
+  .vdrop-diagram {
+    width: 100%; height: auto;
+    display: block;
+    max-width: 980px; margin: 0 auto;
+    font-family: inherit;
+  }
+  .vdrop-diagram text { fill: var(--text); font-size: 12px; }
+  .vdrop-diagram .vd-sub { fill: var(--muted); font-size: 10.5px; }
+  .vdrop-diagram .vd-drop { fill: var(--warn); font-weight: 700; font-size: 12.5px; }
+  .vdrop-diagram .vd-rwu  { fill: var(--ok);   font-size: 10.5px; }
+  .vdrop-diagram .vd-box-fill { fill: var(--panel2); stroke: var(--border); stroke-width: 1.5; }
+  .vdrop-diagram .vd-box-ok   { fill: rgba(34,197,94,.10);  stroke: var(--ok);     stroke-width: 1.5; }
+  .vdrop-diagram .vd-box-bad  { fill: rgba(239,68,68,.10);  stroke: var(--danger); stroke-width: 1.5; }
+  .vdrop-diagram .vd-wire     { stroke: var(--accent); stroke-width: 3; fill: none; }
+  .vdrop-diagram .vd-wire-inj { stroke: #c084fc;        stroke-width: 2.5; fill: none; stroke-dasharray: 6 4; }
+  .vdrop-diagram .vd-arrowhead{ fill: var(--accent); }
+  .vdrop-diagram .vd-arrowhead-inj { fill: #c084fc; }
+  .vdrop-diagram .vd-title    { font-weight: 700; font-size: 12.5px; }
+  .vdrop-legend {
+    display:flex; flex-wrap:wrap; gap:14px; justify-content:center;
+    margin-top: 10px; padding: 8px 10px;
+    font-size:.72rem; color: var(--muted);
+    border-top: 1px solid var(--border);
+  }
+  .vdrop-legend .lg-swatch {
+    display:inline-block; width:14px; height:3px; vertical-align:middle;
+    margin-right:5px; border-radius:1px;
+  }
+
   /* Verdict banner + review blocks (Batch A: #1 verdict, #3 wins, #8 edge cases) */
   .verdict-row {
     display:flex; align-items:center; gap:14px;
@@ -1656,6 +1689,109 @@ function populateInjSourcePS() {
 // ── Main calculation ───────────────────────────────────────────────────────
 let voltagDropChart = null;
 
+// ── Voltage-drop SVG diagram builder (Batch C: #7) ───────────────────────────
+// Renders user's actual DC chain: PSU → [pigtail] → extension → Pixel 1 → ... → Pixel N
+// plus optional injection branch when injection modelling is enabled.
+function buildDcDiagramSvg(d) {
+  const vbW = 940;
+  const vbH = d.injModelOn ? 360 : 230;
+  const yMain = 55, hBox = 95;
+  const yWire = yMain + hBox / 2;
+  const xPSU = 20,  wPSU = 130;
+  const xP1  = 570, wP1  = 130;
+  const xPN  = 810, wPN  = 110;
+  const xWireStart = xPSU + wPSU;
+  const xPigEnd    = d.pigtailOn ? 320 : xWireStart;
+
+  const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  let s = `<svg class="vdrop-diagram" viewBox="0 0 ${vbW} ${vbH}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="DC voltage drop chain diagram">
+    <defs>
+      <marker id="vdArr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+        <path d="M0,0 L10,5 L0,10 z" class="vd-arrowhead"/>
+      </marker>
+      <marker id="vdArrInj" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+        <path d="M0,0 L10,5 L0,10 z" class="vd-arrowhead-inj"/>
+      </marker>
+    </defs>
+
+    <!-- PSU box -->
+    <rect class="vd-box-fill" x="${xPSU}" y="${yMain}" width="${wPSU}" height="${hBox}" rx="8"/>
+    <text class="vd-title" x="${xPSU + wPSU/2}" y="${yMain + 22}" text-anchor="middle">Power Supply</text>
+    <text x="${xPSU + wPSU/2}" y="${yMain + 44}" text-anchor="middle" style="font-weight:700;">${d.VOLTS}V DC</text>
+    <text class="vd-sub" x="${xPSU + wPSU/2}" y="${yMain + 64}" text-anchor="middle">${d.mainFeedAmps.toFixed(2)}A peak</text>
+    <text class="vd-rwu" x="${xPSU + wPSU/2}" y="${yMain + 82}" text-anchor="middle">${d.rwuMainFeedAmps.toFixed(2)}A RWU</text>`;
+
+  // Pigtail segment
+  if (d.pigtailOn) {
+    const xMid = (xWireStart + xPigEnd) / 2;
+    const ok = d.pigtailOk;
+    s += `
+    <line class="vd-wire" x1="${xWireStart}" y1="${yWire}" x2="${xPigEnd}" y2="${yWire}" ${ok ? '' : 'stroke="var(--danger)"'}/>
+    <text class="vd-title" x="${xMid}" y="${yWire - 22}" text-anchor="middle">Pigtail ${ok ? '' : '⚠'}</text>
+    <text class="vd-sub"   x="${xMid}" y="${yWire - 7}" text-anchor="middle">${esc(d.pigtailGauge)} AWG · ${d.pigtailLen} ft</text>
+    <text class="vd-drop"  x="${xMid}" y="${yWire + 22}" text-anchor="middle">−${d.vdropPigtail.toFixed(3)}V</text>
+    <text class="vd-rwu"   x="${xMid}" y="${yWire + 38}" text-anchor="middle">−${d.rwuVdropPigtail.toFixed(3)}V RWU</text>`;
+  }
+
+  // Extension segment
+  const xExtMid = (xPigEnd + xP1) / 2;
+  const extOkAttr = d.extOk ? '' : 'stroke="var(--danger)"';
+  s += `
+    <line class="vd-wire" x1="${xPigEnd}" y1="${yWire}" x2="${xP1}" y2="${yWire}" marker-end="url(#vdArr)" ${extOkAttr}/>
+    <text class="vd-title" x="${xExtMid}" y="${yWire - 22}" text-anchor="middle">Extension ${d.extOk ? '' : '⚠'}</text>
+    <text class="vd-sub"   x="${xExtMid}" y="${yWire - 7}" text-anchor="middle">${esc(d.extGauge)} AWG · ${d.extLen} ft</text>
+    <text class="vd-drop"  x="${xExtMid}" y="${yWire + 22}" text-anchor="middle">−${d.vdropExtension.toFixed(3)}V</text>
+    <text class="vd-rwu"   x="${xExtMid}" y="${yWire + 38}" text-anchor="middle">−${d.rwuVdropExtension.toFixed(3)}V RWU</text>`;
+
+  // Pixel 1 box (OK/BAD)
+  const p1Class = (d.vAtStrip >= d.minV) ? 'vd-box-ok' : 'vd-box-bad';
+  s += `
+    <rect class="${p1Class}" x="${xP1}" y="${yMain}" width="${wP1}" height="${hBox}" rx="8"/>
+    <text class="vd-title" x="${xP1 + wP1/2}" y="${yMain + 22}" text-anchor="middle">Pixel 1</text>
+    <text x="${xP1 + wP1/2}" y="${yMain + 46}" text-anchor="middle" style="font-weight:700;font-size:14px;">${d.vAtStrip.toFixed(2)}V</text>
+    <text class="vd-rwu" x="${xP1 + wP1/2}" y="${yMain + 64}" text-anchor="middle">${d.rwuVAtStrip.toFixed(2)}V RWU</text>
+    <text class="vd-sub" x="${xP1 + wP1/2}" y="${yMain + 82}" text-anchor="middle">(min ${d.minV}V)</text>`;
+
+  // Strand connector + Pixel N
+  const xStrandMid = (xP1 + wP1 + xPN) / 2;
+  s += `
+    <line class="vd-wire" x1="${xP1 + wP1}" y1="${yWire}" x2="${xPN}" y2="${yWire}" stroke-dasharray="6 5" marker-end="url(#vdArr)"/>
+    <text class="vd-sub" x="${xStrandMid}" y="${yWire - 8}" text-anchor="middle">${(d.numPixels - 1).toLocaleString()} more pixels</text>
+    <text class="vd-sub" x="${xStrandMid}" y="${yWire + 22}" text-anchor="middle">(intra-strand drop)</text>
+    <rect class="vd-box-fill" x="${xPN}" y="${yMain}" width="${wPN}" height="${hBox}" rx="8"/>
+    <text class="vd-title" x="${xPN + wPN/2}" y="${yMain + 22}" text-anchor="middle">Pixel N</text>
+    <text class="vd-sub" x="${xPN + wPN/2}" y="${yMain + 46}" text-anchor="middle">#${d.numPixels.toLocaleString()}</text>
+    <text class="vd-sub" x="${xPN + wPN/2}" y="${yMain + 72}" text-anchor="middle">must ≥ ${d.minV}V</text>`;
+
+  // Injection branch
+  if (d.injModelOn) {
+    const yInjWire = 260;
+    const xInjStart = xPSU + wPSU / 2;
+    const xInjTap   = xP1 + wP1 + 40;
+    const srcLabel = d.injModelSource === 'same'           ? 'Same PSU (spare V+/V-)'
+                   : d.injModelSource === 'dedicatedSame'  ? 'Dedicated PSU (same model)'
+                   : 'Dedicated: ' + (d.injPSName || 'other');
+    const injOkAttr = d.injCableOk ? '' : 'stroke="var(--danger)"';
+    s += `
+    <path class="vd-wire-inj" d="M ${xInjStart} ${yMain + hBox} L ${xInjStart} ${yInjWire} L ${xInjTap} ${yInjWire}" marker-end="url(#vdArrInj)" ${injOkAttr}/>
+    <text class="vd-sub"   x="${xInjStart + 8}" y="${yMain + hBox + 22}" text-anchor="start" style="fill:#c084fc;">↓ ${esc(srcLabel)}</text>
+    <text class="vd-title" x="${(xInjStart + xInjTap)/2}" y="${yInjWire - 14}" text-anchor="middle" style="fill:#c084fc;">Injection cable${d.numInjCables>1?'s':''} (×${d.numInjCables}) ${d.injCableOk ? '' : '⚠'}</text>
+    <text class="vd-sub"   x="${(xInjStart + xInjTap)/2}" y="${yInjWire + 16}" text-anchor="middle">${esc(d.injGauge)} AWG · ${d.injModelLen} ft each</text>
+    <text class="vd-drop"  x="${(xInjStart + xInjTap)/2}" y="${yInjWire + 34}" text-anchor="middle">−${d.injCableVdrop.toFixed(3)}V · ${d.injCableAmps.toFixed(2)}A peak</text>
+    <text class="vd-rwu"   x="${(xInjStart + xInjTap)/2}" y="${yInjWire + 50}" text-anchor="middle">−${d.rwuInjCableVdrop.toFixed(3)}V RWU · ${d.rwuInjCableAmps.toFixed(2)}A RWU</text>
+    <text class="vd-sub"   x="${xInjTap + 10}" y="${yInjWire + 4}" text-anchor="start">tap ≈ pixel ${(d.mainPixels + 1).toLocaleString()}</text>`;
+  }
+
+  s += `</svg>
+  <div class="vdrop-legend">
+    <span><span class="lg-swatch" style="background:var(--accent);"></span>DC wire path</span>
+    <span style="color:var(--warn);"><strong>−V</strong> peak-white drop</span>
+    <span style="color:var(--ok);"><strong>RWU</strong> realistic show load (${Math.round(d.rwuFactor*100)}%)</span>
+    ${d.injModelOn ? `<span><span class="lg-swatch" style="background:#c084fc;"></span>injection branch</span>` : ''}
+  </div>`;
+  return s;
+}
+
 function calculate() {
   const numPixels     = Math.round(vn('numPixels'));
   const brightness    = vn('brightness') / 100;
@@ -2245,6 +2381,25 @@ function calculate() {
           </div>` : ''}
           <br><strong>Injection wire sizing reference (${injGauge} AWG):</strong> ${injAmpacity}A rated &mdash; ${injTapAmps.toFixed(2)}A per tap &mdash; limited by <em>${injLimitedBy}</em>
           ${injTapOk ? ' <span class="badge badge-ok">OK</span>' : ' <span class="badge badge-danger">OVERLOADED</span>'}
+        </div>
+      </div>
+    </div>
+
+    <!-- ── VOLTAGE DROP DIAGRAM (Batch C: #7) ── -->
+    <div class="result-section advanced-only">
+      <div class="result-section-header">&#128194; Voltage Drop Diagram &mdash; your actual chain</div>
+      <div class="result-section-body">
+        <div class="vdrop-diagram-wrap">
+          ${buildDcDiagramSvg({
+            VOLTS, minV, numPixels, mainPixels,
+            pigtailOn, pigtailGauge, pigtailLen, vdropPigtail, rwuVdropPigtail, pigtailOk,
+            extGauge, extLen, vdropExtension, rwuVdropExtension, extOk,
+            vAtStrip, rwuVAtStrip,
+            mainFeedAmps, rwuMainFeedAmps, rwuFactor,
+            injModelOn, injGauge, injModelLen, injCableVdrop, rwuInjCableVdrop,
+            injCableAmps, rwuInjCableAmps, injCableOk, numInjCables,
+            injModelSource, injPSName: (injPS ? injPS.name : '')
+          })}
         </div>
       </div>
     </div>
