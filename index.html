@@ -6,6 +6,11 @@
 <title>WS2811 12V Pixel Power Calculator</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"
   onerror="this.onerror=null;this.src='https://unpkg.com/chart.js@4.4.0/dist/chart.umd.min.js'"></script>
+<!-- Batch D (#6): PDF export via html2canvas + jsPDF -->
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"
+  onerror="this.onerror=null;this.src='https://unpkg.com/html2canvas@1.4.1/dist/html2canvas.min.js'"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"
+  onerror="this.onerror=null;this.src='https://unpkg.com/jspdf@2.5.1/dist/jspdf.umd.min.js'"></script>
 <style>
   :root {
     --bg: #0f0f14;
@@ -274,6 +279,22 @@
     border:1px solid rgba(34,197,94,.3);
     font-size:.8rem; line-height:1.55; color: var(--text);
   }
+
+  /* Save-as-PDF toolbar (Batch D: #6) */
+  .result-toolbar {
+    display:flex; justify-content:flex-end; align-items:center; gap:10px;
+    margin:0 0 12px;
+  }
+  .pdf-btn {
+    display:inline-flex; align-items:center; gap:6px;
+    padding:8px 14px; border-radius:7px;
+    background: var(--panel2); border:1px solid var(--border);
+    color: var(--text); font-size:.82rem; cursor:pointer;
+    transition: all .15s ease;
+  }
+  .pdf-btn:hover { border-color: var(--accent); background: rgba(79,142,247,.08); }
+  .pdf-btn:disabled { opacity:.6; cursor:wait; }
+  .pdf-btn-icon { font-size:1rem; line-height:1; }
 
   /* Voltage-drop SVG diagram (Batch C: #7) */
   .vdrop-diagram-wrap {
@@ -1661,6 +1682,61 @@ function toggleBeginnerMode() {
   label.textContent = now ? 'Advanced Mode' : 'Beginner Mode';
 }
 
+// ── Save build as PDF (Batch D: #6) ──────────────────────────────────────────
+// Snapshots the results container with html2canvas, exports multi-page PDF via jsPDF.
+async function savePdf(containerId, filenameBase) {
+  const btn = event && event.currentTarget;
+  const el = document.getElementById(containerId);
+  if (!el) return;
+  if (!window.html2canvas || !window.jspdf) {
+    alert('PDF export library did not load. Check your network connection and try again.');
+    return;
+  }
+  const origLabel = btn ? btn.innerHTML : '';
+  if (btn) { btn.disabled = true; btn.innerHTML = 'Rendering PDF…'; }
+  try {
+    // Ensure latest layout is settled
+    await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+
+    const bg = getComputedStyle(document.body).backgroundColor || '#1a1b2e';
+    const canvas = await html2canvas(el, {
+      backgroundColor: bg,
+      scale: 2,
+      useCORS: true,
+      logging: false,
+      windowWidth: el.scrollWidth,
+      windowHeight: el.scrollHeight
+    });
+
+    const { jsPDF } = window.jspdf;
+    const pdf = new jsPDF({ unit: 'pt', format: 'letter', orientation: 'portrait' });
+
+    const pageW = pdf.internal.pageSize.getWidth();   // 612
+    const pageH = pdf.internal.pageSize.getHeight();  // 792
+    const margin = 24;
+    const imgW = pageW - margin * 2;
+    const ratio = canvas.width / canvas.height;
+    const imgH = imgW / ratio;
+    const usableH = pageH - margin * 2;
+    const pageCount = Math.max(1, Math.ceil(imgH / usableH));
+
+    const imgData = canvas.toDataURL('image/png');
+    for (let i = 0; i < pageCount; i++) {
+      if (i > 0) pdf.addPage();
+      const yOffset = margin - i * usableH;
+      pdf.addImage(imgData, 'PNG', margin, yOffset, imgW, imgH);
+    }
+
+    const ts = new Date().toISOString().slice(0, 10);
+    pdf.save(`${filenameBase || 'pixel-calc-build'}-${ts}.pdf`);
+  } catch (err) {
+    console.error('PDF export failed:', err);
+    alert('PDF export failed: ' + (err && err.message ? err.message : err));
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerHTML = origLabel; }
+  }
+}
+
 // ── Injection modeling toggle + source handlers ──────────────────────────
 function onInjModelToggle() {
   const on = document.getElementById('injModelEnabled').checked;
@@ -2252,6 +2328,12 @@ function calculate() {
     </div>`;
 
   document.getElementById('results').innerHTML = `
+    <!-- ── PDF EXPORT TOOLBAR (Batch D: #6) ───────────────────────── -->
+    <div class="result-toolbar">
+      <button class="pdf-btn" onclick="savePdf('results','pixel-string-power')">
+        <span class="pdf-btn-icon">&#128196;</span> Save Build as PDF
+      </button>
+    </div>
 
     <!-- ── VERDICT BANNER (Batch A: #1) ───────────────────────────── -->
     <div class="verdict-row verdict-${verdictType}">
@@ -3853,6 +3935,12 @@ function _calculateController() {
 
   // ── Render ────────────────────────────────────────────────────────────────
   document.getElementById('ctrlResults').innerHTML = `
+    <!-- ── PDF EXPORT TOOLBAR (Batch D: #6) ───────────────────────── -->
+    <div class="result-toolbar">
+      <button class="pdf-btn" onclick="savePdf('ctrlResults','pixel-controller-setup')">
+        <span class="pdf-btn-icon">&#128196;</span> Save Build as PDF
+      </button>
+    </div>
     <div class="results-grid">
 
       <div class="card">
@@ -4454,6 +4542,12 @@ function _calculateMegatree() {
 
   // ── Render Results ─────────────────────────────────────────────────────────
   document.getElementById('mtResults').innerHTML = `
+    <!-- ── PDF EXPORT TOOLBAR (Batch D: #6) ───────────────────────── -->
+    <div class="result-toolbar">
+      <button class="pdf-btn" onclick="savePdf('mtResults','pixel-megatree')">
+        <span class="pdf-btn-icon">&#128196;</span> Save Build as PDF
+      </button>
+    </div>
     <div class="results-grid">
       <div class="card">
         <div class="card-title">Tree Geometry</div>
