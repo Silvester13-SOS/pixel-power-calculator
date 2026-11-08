@@ -238,6 +238,38 @@
   }
   .result-section-body { padding: 16px 18px; }
 
+  /* Verdict banner + review blocks (Batch A: #1 verdict, #3 wins, #8 edge cases) */
+  .verdict-row {
+    display:flex; align-items:center; gap:14px;
+    padding:14px 18px; margin:0 0 14px; border-radius:10px;
+    border:1px solid var(--border);
+  }
+  .verdict-row.verdict-ok      { background:rgba(34,197,94,.08);  border-color:rgba(34,197,94,.4); }
+  .verdict-row.verdict-caution { background:rgba(245,158,11,.08); border-color:rgba(245,158,11,.4); }
+  .verdict-row.verdict-critical{ background:rgba(239,68,68,.08);  border-color:rgba(239,68,68,.4); }
+  .verdict-icon { font-size:1.7rem; line-height:1; }
+  .verdict-row.verdict-ok      .verdict-icon { color: var(--ok); }
+  .verdict-row.verdict-caution .verdict-icon { color: var(--warn); }
+  .verdict-row.verdict-critical .verdict-icon { color: var(--danger); }
+  .verdict-line { font-weight:700; font-size:1.05rem; color:var(--text); line-height:1.3; }
+  .verdict-sub  { font-size:.78rem; color:var(--muted); margin-top:3px; }
+
+  .review-block {
+    padding:12px 16px; margin:0 0 12px; border-radius:8px;
+    border-left:3px solid; background:rgba(255,255,255,.02);
+  }
+  .review-critical { border-left-color: var(--danger); background: rgba(239,68,68,.05); }
+  .review-caution  { border-left-color: var(--warn);   background: rgba(245,158,11,.05); }
+  .review-wins     { border-left-color: var(--ok);     background: rgba(34,197,94,.05); }
+  .review-head { font-weight:700; margin-bottom:8px; font-size:.9rem; }
+  .review-critical .review-head { color: var(--danger); }
+  .review-caution  .review-head { color: var(--warn); }
+  .review-wins     .review-head { color: var(--ok); }
+  .review-item { padding:7px 0; font-size:.82rem; line-height:1.6; }
+  .review-item + .review-item { border-top:1px dashed rgba(255,255,255,.06); margin-top:2px; }
+  .review-item strong { color: var(--text); }
+  .review-item .ri-body { color: var(--muted); display:block; margin-top:2px; }
+
   /* Circuit table */
   table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
   th {
@@ -1903,7 +1935,131 @@ function calculate() {
     return html;
   })();
 
+  // ── Verdict / Review builder (Batch A: #1 verdict banner, #3 wins, #8 edge cases) ──
+  const critical = [];
+  const cautions = [];
+  const wins     = [];
+
+  // Critical issues — blockers that mean the design will not work or is unsafe.
+  if (vBudgetStrip <= 0 && rwuVBudgetStrip <= 0) critical.push({
+    t: 'External wiring exceeds voltage budget even at RWU',
+    b: `Pigtail + extension drop <strong>${(vdropPigtail+vdropExtension).toFixed(2)}V</strong> at peak and <strong>${(rwuVdropPigtail+rwuVdropExtension).toFixed(2)}V</strong> at RWU — both over the ${totalBudget.toFixed(2)}V budget. Shorten the extension, upsize gauge, or move the PSU closer to the prop.`
+  });
+  if (!extOk) critical.push({
+    t: `Extension wire overloaded (${extGauge} AWG carrying ${mainFeedAmps.toFixed(1)}A, rated ${extAmpacity}A)`,
+    b: `Upsize the extension gauge, reduce pixels fed by this port, or add injection closer to pixel 1.`
+  });
+  if (!pigtailOk) critical.push({
+    t: `Pigtail overloaded (${pigtailGauge} AWG carrying ${mainFeedAmps.toFixed(1)}A, rated ${WIRE_AMP[pigtailGauge]}A)`,
+    b: `Note: 18 AWG is the largest commercially-available Christmas pigtail. If peak load exceeds that, you can't just upsize the pigtail — shorten what this port drives, inject sooner, or split across multiple ports.`
+  });
+  if (injModelOn && !injCableOk) critical.push({
+    t: `Injection cables overloaded (${injGauge} AWG carrying ${injCableAmps.toFixed(1)}A each, rated ${injAmpacity}A)`,
+    b: `Upsize the injection cable gauge, or reduce the injection spacing so each cable feeds fewer pixels.`
+  });
+
+  // Cautions — design works but has a wrinkle worth flagging.
+  if (vBudgetStrip <= 0 && rwuVBudgetStrip > 0) cautions.push({
+    t: `Budget exceeded at peak white — safe at ${Math.round(rwuFactor*100)}% RWU`,
+    b: `Fine for mixed colour sequences. Not safe for sustained all-white chases, static white, or video playback. If you run any of those, treat this as critical.`
+  });
+  if (acSafety >= 1.0) cautions.push({
+    t: `AC safety factor at 100% — NEC 210.20 non-compliant`,
+    b: `Breakers running at full rated load leave zero margin for continuous draw, inrush, or ageing. You've assumed this risk explicitly.`
+  });
+  else if (acSafety >= 0.9) cautions.push({
+    t: `AC safety factor at 90% — above NEC's 80% continuous-load limit`,
+    b: `Acceptable only for loads you can prove are not continuous (ON for 3+ hours straight). Christmas shows typically are continuous.`
+  });
+  if (brightness >= 1.0) cautions.push({
+    t: `Brightness set to 100% — pure peak-white sizing`,
+    b: `Real shows almost never hit sustained 100% white. Sizing to 60–80% target brightness is more realistic and will reduce PSU count. RWU slider separately scales the drop display.`
+  });
+  if (numPixels > 1000 && !injModelOn) cautions.push({
+    t: `Large prop (${numPixels.toLocaleString()} px) with injection modeling OFF`,
+    b: `Above ~1,000 pixels a single pigtail can't carry the full load. Enable "Model my actual injection setup" in the sidebar to get realistic pigtail/extension numbers that reflect how injection decouples the strand.`
+  });
+  if (injModelOn && injModelSpacing < 50) cautions.push({
+    t: `Injection every ${injModelSpacing} px is unusually dense`,
+    b: `Most installs use 100–200 px intervals. If voltage drop is truly forcing <50 px, consider going 24V, regulated pixels, or a lower brightness target to widen the budget.`
+  });
+  if (injModelOn && injModelSpacing > 300) cautions.push({
+    t: `Injection every ${injModelSpacing} px is unusually loose`,
+    b: `Check the N² taper chart below — pixels at the midpoint of each segment may dip below minimum voltage at peak draw.`
+  });
+  if (extLen > 50) cautions.push({
+    t: `Extension run is long (${extLen} ft)`,
+    b: `DC distribution over long runs is where voltage disappears. Consider relocating the PSU closer to the prop if feasible.`
+  });
+  if (pigtailOn && mainFeedAmps > WIRE_AMP[pigtailGauge] * 0.9 && mainFeedAmps <= WIRE_AMP[pigtailGauge]) cautions.push({
+    t: `Pigtail near its ampacity limit (${mainFeedAmps.toFixed(1)}A on ${pigtailGauge} AWG ${WIRE_AMP[pigtailGauge]}A)`,
+    b: `Within 10% of max. Any sequence that pushes harder than modeled — or a warmer install location — moves this into overload territory.`
+  });
+
+  // Wins — positive feedback on things the user got right.
+  if (vBudgetStrip > 0 && totalBudget > 0 && rwuVBudgetStrip > totalBudget * 0.5) wins.push({
+    t: `Healthy voltage headroom`,
+    b: `At RWU you have ${rwuVBudgetStrip.toFixed(2)}V (${((rwuVBudgetStrip/totalBudget)*100).toFixed(0)}% of budget) remaining for intra-segment drop. Extension and pigtail choices are well-sized for this load.`
+  });
+  if (acSafety <= 0.8) wins.push({
+    t: `NEC-compliant AC safety factor (${Math.round(acSafety*100)}%)`,
+    b: `At or under NEC 210.20's 80% continuous-load derate — safe electrical practice for a show that runs hours per night.`
+  });
+  if (psDerate <= 0.8) wins.push({
+    t: `Conservative PSU derate (${Math.round(psDerate*100)}%)`,
+    b: `Sizing PSUs at ${Math.round(psDerate*100)}% of nameplate leaves margin for heat, ageing, and inrush. Extends PSU life materially.`
+  });
+  if (extGauge <= 14 && extLen >= 10) wins.push({
+    t: `Extension wire upsized from the default`,
+    b: `${extGauge} AWG for the ${extLen} ft run — proper upsizing for DC distribution over distance. Saves voltage you'd otherwise lose to resistance.`
+  });
+  if (injModelOn) wins.push({
+    t: `Realistic injection modeling enabled`,
+    b: `The pigtail current now reflects only the initial-push segment, not the whole strand. Numbers match how a real installed prop actually works.`
+  });
+  if (injModelOn && injPS) wins.push({
+    t: `Dedicated injection PSU`,
+    b: `Isolating injection on a separate PSU keeps the main PSU sized for just the initial-push segment and simplifies troubleshooting down the line.`
+  });
+  if (!injModelOn && numPixels <= 300 && vBudgetStrip > 0) wins.push({
+    t: `Prop small enough to skip injection`,
+    b: `${numPixels} pixels fits inside the voltage budget on the extension alone — no mid-strand injection needed.`
+  });
+  if (rwuFactor < 0.6) wins.push({
+    t: `Realistic RWU factor set (${Math.round(rwuFactor*100)}%)`,
+    b: `Modelling against actual show load instead of peak-white worst case gives you the honest picture of what your wiring will see.`
+  });
+
+  // Verdict
+  const verdictType = critical.length > 0 ? 'critical' : cautions.length > 0 ? 'caution' : 'ok';
+  const verdictIcon = verdictType === 'ok' ? '&#10003;' : '&#9888;';
+  const verdictLine = verdictType === 'critical'
+    ? `${critical.length} critical issue${critical.length>1?'s':''} — review before building`
+    : verdictType === 'caution'
+      ? `Design works — ${cautions.length} caution${cautions.length>1?'s':''} to review`
+      : `Design is sound and safe to build`;
+  const verdictSub = `${numPixels.toLocaleString()} px · ${numPS} ${ps.name.replace('MeanWell ','')}${injPS ? ' + ' + injNumPS + ' inj ' + injPS.name.replace('MeanWell ','') : ''} · ${numCircuits} circuit${numCircuits>1?'s':''} · ${injModelOn ? numInjCables + ' injection tap' + (numInjCables!==1?'s':'') : 'no injection modeled'}`;
+
+  const reviewBlock = (cls, head, items) => items.length === 0 ? '' : `
+    <div class="review-block review-${cls}">
+      <div class="review-head">${head} (${items.length})</div>
+      ${items.map(x => `<div class="review-item"><strong>${x.t}</strong><span class="ri-body">${x.b}</span></div>`).join('')}
+    </div>`;
+
   document.getElementById('results').innerHTML = `
+
+    <!-- ── VERDICT BANNER (Batch A: #1) ───────────────────────────── -->
+    <div class="verdict-row verdict-${verdictType}">
+      <div class="verdict-icon">${verdictIcon}</div>
+      <div class="verdict-text">
+        <div class="verdict-line">${verdictLine}</div>
+        <div class="verdict-sub">${verdictSub}</div>
+      </div>
+    </div>
+
+    ${reviewBlock('critical', '&#9888; Critical issues', critical)}
+    ${reviewBlock('caution',  '&#9888; Cautions',         cautions)}
+    ${reviewBlock('wins',     '&#10003; What you got right', wins)}
 
     <!-- ── OVERVIEW CARDS ── -->
     <div class="results-grid">
