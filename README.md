@@ -8,7 +8,11 @@ A web-based planning tool for Christmas pixel installations: power sizing, volta
 
 ## What's New in This Revision
 
-- **Verdict banner** at the top of every result — green / amber / red "does this design work" in plain English
+- **Controller Setup safety overhaul** — the brightness slider no longer cascades into PSU count, ampacity checks, injection decision, or fuse checks. All safety-critical numbers are now sized for **100% white worst case**, with your show setting and RWU shown as parallel reference columns. See the Mode 2 section for details.
+- **String Wire Gauge input** on Controller Setup — defaults to 22 AWG (stock bullet pigtails). Drives along-string voltage drop and the real injection decision.
+- **Hard-fail badges with inline remediation** on Controller Setup — ampacity or fuse violations show "FAIL — upsize to N AWG" instead of a tucked-away warning.
+- **Build Interpretation advisory block** on Controller Setup — plain-English "what a typical build at this scale would plan for" instead of a pass/fail verdict.
+- **Verdict banner** at the top of String Power results — green / amber / red "does this design work" in plain English
 - **Review blocks** under the banner: critical issues, cautions, and "what you got right" wins
 - **Voltage-drop diagram** — inline SVG showing your actual DC chain (PSU → pigtail → extension → Pixel 1 → ... → Pixel N), with the injection branch when modelled
 - **"Model my actual injection setup"** — choose whether injection comes from the same PSU's spare V+/V- pair, a dedicated PSU of the same model, or a different PSU
@@ -115,14 +119,41 @@ The tool reads each controller's spec from its definition: total ports, ports pe
 - **PSU → Controller pigtail** — gauge + length, optional
 - **Controller → Extension board** — gauge + length, optional (shows ampacity badge)
 - **Extension → First Pixel** — always required
+- **String Wire Gauge** — gauge of the along-string pigtail (typically 22 AWG on stock bullet harnesses, 20 AWG on some custom builds). Used for the along-string voltage drop and the injection decision. Defaults to 22 AWG.
+
+### Safety-Critical Sizing (100% White Worst Case)
+
+As of the Controller Setup safety overhaul, the brightness slider **no longer cascades** into PSU count, port/bank ampacity, pigtail checks, fuse checks, or the injection decision. All safety-critical numbers are sized for **100% white worst case** — the current the wire and the PSU will see if a stuck effect, a test pattern, or a white-flash sequence puts the lights at full output.
+
+The results page now shows three parallel columns where relevant:
+
+- **Worst case (100% white)** — the number the hardware must survive
+- **Show setting** — what your current brightness slider would draw
+- **RWU** — realistic sequence draw (worst case × RWU factor)
+
+The "which PSU goes where" allocator, the ampacity warnings, and the injection distance are driven by the worst-case column. The other two columns are for reference only.
+
+### Hard-Fail Badges with Remediation
+
+Ampacity or fuse violations now show an inline **"FAIL — upsize to N AWG"** badge (or equivalent remediation) on the offending row. The results are not hidden — you still see the current value and the limit it exceeded — but the row is flagged red with the specific fix instead of being buried in a "⚠" chip next to a green overall status.
+
+Examples:
+- Port driving 18A on 18 AWG string wire (7A rated) → **"FAIL — upsize to 12 AWG"**
+- Bank over 24A → **"FAIL — redistribute pixels across banks"**
+- Pigtail over its ampacity at worst case → **"FAIL — upsize pigtail or shorten port"**
+
+### Build Interpretation Block
+
+At the bottom of the results, in place of the old "no injection needed" / "injection required" green chip, there's now a **Build Interpretation** section. It's plain-English, bulleted, and framed as *"a typical build at this scale would plan for..."* rather than a pass/fail verdict from the tool. Covers PSU count reasoning, injection expectation, feeder gauge, and AC-side distribution.
 
 ### Results
 
 Same verdict / cautions / wins framework at the top, plus:
-- **Per-Bank Power Breakdown** with per-port and per-bank limit checks, RWU-aware (amber if theoretical over but RWU OK, red if RWU also over)
-- **Power Injection Map** (per-port mode) — exact injection points with voltage at each tap
-- **PSU Allocation** — which PSUs feed which banks, with utilization %
+- **Per-Bank Power Breakdown** with per-port and per-bank limit checks at worst case, hard-fail badges with remediation inline, show / RWU columns for reference
+- **Power Injection Map** (per-port mode) — exact injection points with voltage at each tap, using string wire gauge and worst-case per-pixel current
+- **PSU Allocation** — which PSUs feed which banks, utilization % at worst case, with pigtail ampacity hard-failed at worst case as well
 - **AC Circuit Distribution** following NEC 80% continuous-load rule
+- **Build Interpretation** — plain-English advisory on what a typical build at this scale would plan for
 
 ---
 
@@ -200,6 +231,12 @@ Christmas sequences with colour variety typically draw **25–45%** of theoretic
 
 **Voltage below minimum at Pixel 1** — your DC feed chain is losing too much voltage before the string. Upsize extension gauge, shorten the run, or add injection.
 
+**"FAIL — upsize to N AWG" on Controller Setup** — the wire on that row can't carry the worst-case (100% white) current for the pixels it feeds. The tool tells you the exact gauge that will. Pick a thicker wire or reduce the pixel count on that port / bank.
+
+**"Controller Setup shows more PSUs than I was expecting"** — the PSU count is now sized for 100% white worst case, not your brightness slider. This is intentional: a stuck effect, a test pattern, or a white-flash moment will pull the worst-case current, and the PSU has to survive it. The show-setting column is shown next to it for reference.
+
+**"Injection needed" on Controller Setup when the old version said no** — the injection decision now uses String Wire Gauge (default 22 AWG) and worst-case per-pixel current. 22 AWG along-string with worst-case load drops voltage much faster than the old (broken) formula assumed. The new result is the honest one.
+
 **Browser seems to remember old values** — click **Reset to Defaults** under Calculate. The tool now turns off browser form-autofill, but any leftovers from before this update will clear with Reset.
 
 ---
@@ -223,6 +260,10 @@ Christmas sequences with colour variety typically draw **25–45%** of theoretic
 ## Version History
 
 ### Current (2025 Christmas prep revision)
+- **Controller Setup safety overhaul** — brightness decoupled from PSU count, ampacity, injection decision, and fuse checks; everything safety-critical sized for 100% white worst case with show / RWU shown as parallel reference columns
+- **String Wire Gauge input** on Controller Setup (default 22 AWG) driving the real along-string drop and injection distance
+- **Hard-fail badges with inline remediation** on Controller Setup (ampacity / fuse violations show "FAIL — upsize to N AWG" instead of being buried in a warning chip)
+- **Build Interpretation advisory block** on Controller Setup replacing the old green/amber injection-needed chip
 - 4-inch bullet-pixel spacing added as String Power default
 - Browser autofill disabled; opt-in localStorage cache + Reset to Defaults button
 - Save Build as PDF (jsPDF + html2canvas, CDN-loaded) on every tab
