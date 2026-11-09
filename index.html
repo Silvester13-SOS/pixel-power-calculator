@@ -1858,29 +1858,49 @@ function buildShareUrl() {
   return `${location.origin}${location.pathname}#b=${encoded}`;
 }
 
-function loadFromHash() {
+// Parse the hash without applying anything. Returns the payload or null.
+function _parseHashPayload() {
   const h = location.hash || '';
-  if (!h.startsWith('#b=')) return false;
+  if (!h.startsWith('#b=')) return null;
   try {
     let encoded = h.slice(3).replace(/-/g, '+').replace(/_/g, '/');
-    // pad base64
     while (encoded.length % 4) encoded += '=';
     const json = decodeURIComponent(escape(atob(encoded)));
     const payload = JSON.parse(json);
-    if (!payload || !payload.s) return false;
-    _applySidebarState(payload.s);
-    if (payload.tab === 'ctrl' && typeof setMode === 'function') setMode(2);
-    else if (payload.tab === 'mt' && typeof setMode === 'function') setMode(3);
-    else if (typeof setMode === 'function') setMode(1);
-    // Persist the restored state and clear the hash so a later refresh
-    // uses the restored state via localStorage, not the (long) URL.
-    saveFormCache();
-    history.replaceState(null, '', location.pathname + location.search);
-    return true;
+    if (!payload || !payload.s) return null;
+    return payload;
   } catch (e) {
-    console.warn('Build link could not be loaded:', e);
-    return false;
+    console.warn('Build link could not be parsed:', e);
+    return null;
   }
+}
+
+// Apply a parsed payload. Done in two passes bracketed by _syncDependentUI
+// so that voltage-dependent dropdowns (psModel, injModelSourcePS) get rebuilt
+// with the right options BEFORE we try to select the value from the payload.
+function _applyPayload(payload) {
+  if (!payload || !payload.s) return false;
+  // Pass 1: set everything we can (root fields like acVoltage, etc. will
+  // take effect; dropdowns whose options aren't populated yet will be lost
+  // and get re-set in pass 2).
+  _applySidebarState(payload.s);
+  if (payload.tab === 'ctrl' && typeof setMode === 'function') setMode(2);
+  else if (payload.tab === 'mt' && typeof setMode === 'function') setMode(3);
+  else if (typeof setMode === 'function') setMode(1);
+  // Pass 2: let dependent-UI handlers populate secondary dropdowns.
+  if (typeof _syncDependentUI === 'function') _syncDependentUI();
+  // Pass 3: re-apply so secondary-dropdown values stick now that options exist.
+  _applySidebarState(payload.s);
+  // Persist and clear hash so a refresh uses the restored state via cache.
+  saveFormCache();
+  history.replaceState(null, '', location.pathname + location.search);
+  return true;
+}
+
+function loadFromHash() {
+  const payload = _parseHashPayload();
+  if (!payload) return false;
+  return _applyPayload(payload);
 }
 
 async function copyBuildLink(btn) {
@@ -2059,9 +2079,13 @@ window.addEventListener('DOMContentLoaded', () => {
   disableAutofill();
   // URL hash wins over localStorage cache — a shared build link should
   // override whatever the user had before. If no hash, fall back to cache.
+  // loadFromHash() handles its own _syncDependentUI calls (two-pass apply);
+  // the cache path still needs one sync pass to populate dependent dropdowns.
   const hashLoaded = loadFromHash();
-  if (!hashLoaded) loadFormCache();
-  _syncDependentUI();
+  if (!hashLoaded) {
+    loadFormCache();
+    _syncDependentUI();
+  }
   // Save on any change anywhere in any sidebar.
   _allSidebarFields().forEach(el => {
     el.addEventListener('change', saveFormCache);
@@ -2073,6 +2097,16 @@ window.addEventListener('DOMContentLoaded', () => {
   // Re-run the String Power auto-calculation so returning users see results
   // that reflect their restored cached inputs (the inline calculate() at
   // bottom of script runs before DOMContentLoaded, i.e. before cache load).
+  try { if (typeof calculate === 'function') calculate(); } catch (e) { /* non-fatal */ }
+});
+
+// If the browser reuses an existing tab when a build link is clicked from
+// Discord/elsewhere, DOMContentLoaded does NOT fire — only the hash changes.
+// Listen for that and re-apply so the shared build always wins.
+window.addEventListener('hashchange', () => {
+  const payload = _parseHashPayload();
+  if (!payload) return;
+  _applyPayload(payload);
   try { if (typeof calculate === 'function') calculate(); } catch (e) { /* non-fatal */ }
 });
 
