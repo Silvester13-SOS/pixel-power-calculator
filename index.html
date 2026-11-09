@@ -1956,6 +1956,37 @@ function _truncField(str, max) {
   return str.slice(0, max - 20) + '\n…(truncated)';
 }
 
+// Split a long body across multiple Discord fields so nothing is lost to the
+// 1024-char-per-field limit. Each chunk is wrapped in a code fence. Discord
+// caps total message content at ~6000 chars across all fields/description/
+// title; if we blow through that we still truncate at the end rather than
+// risk the webhook rejecting the payload.
+function _splitFields(label, body, lang) {
+  const out = [];
+  if (!body) {
+    out.push({ name: label, value: '—' });
+    return out;
+  }
+  const open  = '```' + (lang || '') + '\n';
+  const close = '\n```';
+  const overhead = open.length + close.length;
+  const perChunk = 1024 - overhead;             // actual room for payload
+  const chunks = [];
+  for (let i = 0; i < body.length; i += perChunk) {
+    chunks.push(body.slice(i, i + perChunk));
+  }
+  // Hard cap total chunks so one pathological payload can't break the embed
+  // char budget. 4 chunks × 1024 ≈ 4KB which still leaves room for the link.
+  const MAX_CHUNKS = 4;
+  const truncated = chunks.length > MAX_CHUNKS;
+  const useChunks = truncated ? chunks.slice(0, MAX_CHUNKS) : chunks;
+  useChunks.forEach((chunk, i) => {
+    const name = chunks.length > 1 ? `${label} (${i+1}/${useChunks.length}${truncated ? '+':''})` : label;
+    out.push({ name, value: open + chunk + close });
+  });
+  return out;
+}
+
 function _telemetrySend(tabKey, kind, note) {
   // kind: 'calc' = auto log on Calculate click; 'report' = user-initiated bug report
   if (!TELEMETRY_WEBHOOK) return;
@@ -1964,7 +1995,9 @@ function _telemetrySend(tabKey, kind, note) {
   const result = _resultTextFor(tabKey);
   const buildLink = (function () { try { return buildShareUrl(); } catch (e) { return ''; } })();
 
-  const inputsJson = JSON.stringify(inputs, null, 2);
+  // Compact JSON (no indent) — roughly halves the size so it almost always
+  // fits in one field. _splitFields will still chunk if needed.
+  const inputsJson = JSON.stringify(inputs);
   const now = new Date();
   const title = (kind === 'report' ? 'REPORT · ' : '') + _tabLabel(tabKey);
   const color = kind === 'report' ? 15158332 /* red */ : 3447003 /* blue */;
@@ -1973,8 +2006,8 @@ function _telemetrySend(tabKey, kind, note) {
   if (kind === 'report' && note) {
     fields.push({ name: 'User note', value: _truncField(note, 1024) });
   }
-  fields.push({ name: 'Inputs', value: '```json\n' + _truncField(inputsJson, 1000) + '\n```' });
-  fields.push({ name: 'Result summary', value: '```\n' + _truncField(result, 1000) + '\n```' });
+  _splitFields('Inputs', inputsJson, 'json').forEach(f => fields.push(f));
+  _splitFields('Result summary', result, '').forEach(f => fields.push(f));
 
   // The build link URL is ~1800 chars (base64-encoded sidebar state). Discord
   // field values cap at 1024 — too short. Put it in the embed description,
