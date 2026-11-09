@@ -705,18 +705,34 @@
       <div id="injModelFields" style="display:none; margin-top:10px; padding-top:10px; border-top:1px dashed var(--border);">
 
         <div class="field" style="margin-bottom:10px;">
+          <label>Injection pattern <button class="info-btn" onclick="toggleTip(this,'injModelPattern')">i</button></label>
+          <select id="injModelPattern" onchange="onInjPatternChange()">
+            <option value="multi" selected>Multiple taps at regular spacing</option>
+            <option value="loop">Loop method — single tap at end of string</option>
+          </select>
+          <div id="injModelLoopNote" style="display:none; font-size:.7rem; color:var(--muted); margin-top:6px; padding:6px 8px; background:rgba(79,142,247,.06); border-left:2px solid var(--accent); border-radius:0 4px 4px 0; line-height:1.5;">
+            <strong>Loop method:</strong> one feed cable (often a 4-conductor) carries +/&minus; to the string start,
+            and the same cable's extra pair continues alongside the string and injects +/&minus; at the far end.
+            Treated as double-ended injection with one tap at the last pixel. Midpoint sees the highest voltage drop.
+          </div>
+        </div>
+
+        <div class="field" id="injModelFirstWrap" style="margin-bottom:10px;">
           <label>Pixels before first injection <button class="info-btn" onclick="toggleTip(this,'injModelFirst')">i</button></label>
           <input type="number" id="injModelFirst" value="100" min="1" step="10">
         </div>
 
-        <div class="field" style="margin-bottom:10px;">
+        <div class="field" id="injModelSpacingWrap" style="margin-bottom:10px;">
           <label>Injection spacing (pixels between taps) <button class="info-btn" onclick="toggleTip(this,'injModelSpacing')">i</button></label>
           <input type="number" id="injModelSpacing" value="100" min="10" step="10">
         </div>
 
         <div class="field" style="margin-bottom:10px;">
-          <label>Injection cable length (ft, each) <button class="info-btn" onclick="toggleTip(this,'injModelLen')">i</button></label>
+          <label id="injModelLenLabel">Injection cable length (ft, each) <button class="info-btn" onclick="toggleTip(this,'injModelLen')">i</button></label>
           <input type="number" id="injModelLen" value="15" min="0.5" step="0.5">
+          <div id="injModelLenLoopHint" style="display:none; font-size:.7rem; color:var(--muted); margin-top:4px; line-height:1.5;">
+            For loop method, this is the <strong>full length of the end-feed wire</strong> from PSU to the last pixel — i.e. the run from the PSU out to the string plus the length <em>along</em> the string. If the feed cable is 25 ft and the string is 50 ft long, enter <strong>75</strong>.
+          </div>
         </div>
 
         <div class="field" style="margin-bottom:0;">
@@ -1885,6 +1901,107 @@ async function copyBuildLink(btn) {
   setTimeout(() => { btn.innerHTML = orig; btn.disabled = false; }, 1800);
 }
 
+// ── Telemetry (Discord webhook) ────────────────────────────────────────────
+// Posts every Calculate click and every "Report a Problem" submission to a
+// Discord channel the maintainer owns. Fire-and-forget: if the webhook is
+// unreachable, the calculator keeps working for the user.
+//
+// Rotating the webhook: regenerate in Discord and replace the URL below.
+const TELEMETRY_WEBHOOK = 'https://discord.com/api/webhooks/1569122648871534752/tq5mcD7yCYtxnMzBvcwVwRCcCUSsrx3DPEgqMTrjd8T7r0_B2R4TkLWVrK94IuU02cT8';
+
+// Session id — groups a single visitor's submissions across multiple
+// Calculate clicks in the same tab load, so the maintainer can see the
+// user's progression of attempts.
+const TELEMETRY_SESSION_ID = Math.random().toString(36).slice(2, 10);
+
+function _tabLabel(tabKey) {
+  if (tabKey === 'ctrl') return 'Controller Setup';
+  if (tabKey === 'mt')   return 'Megatree Wizard';
+  return 'String Power';
+}
+
+function _resultTextFor(tabKey) {
+  const id = tabKey === 'ctrl' ? 'ctrlResults'
+           : tabKey === 'mt'   ? 'mtResults'
+           : 'results';
+  const el = document.getElementById(id);
+  if (!el) return '';
+  // innerText collapses whitespace from the rendered DOM nicely.
+  return (el.innerText || '').trim();
+}
+
+function _truncField(str, max) {
+  if (!str) return '—';
+  if (str.length <= max) return str;
+  return str.slice(0, max - 20) + '\n…(truncated)';
+}
+
+function _telemetrySend(tabKey, kind, note) {
+  // kind: 'calc' = auto log on Calculate click; 'report' = user-initiated bug report
+  if (!TELEMETRY_WEBHOOK) return;
+  let inputs = {};
+  try { inputs = _collectSidebarState(); } catch (e) { inputs = { _err: String(e) }; }
+  const result = _resultTextFor(tabKey);
+  const buildLink = (function () { try { return buildShareUrl(); } catch (e) { return ''; } })();
+
+  const inputsJson = JSON.stringify(inputs, null, 2);
+  const now = new Date();
+  const title = (kind === 'report' ? 'REPORT · ' : '') + _tabLabel(tabKey);
+  const color = kind === 'report' ? 15158332 /* red */ : 3447003 /* blue */;
+
+  const fields = [];
+  if (kind === 'report' && note) {
+    fields.push({ name: 'User note', value: _truncField(note, 1024) });
+  }
+  fields.push({ name: 'Inputs', value: '```json\n' + _truncField(inputsJson, 1000) + '\n```' });
+  fields.push({ name: 'Result summary', value: '```\n' + _truncField(result, 1000) + '\n```' });
+  if (buildLink) fields.push({ name: 'Open their build', value: buildLink.slice(0, 1024) });
+
+  const payload = {
+    username: 'Pixel Calc',
+    embeds: [{
+      title: title,
+      description: `Session \`${TELEMETRY_SESSION_ID}\` · ${now.toISOString()}`,
+      color: color,
+      fields: fields,
+      footer: { text: (navigator.userAgent || '').slice(0, 2048) },
+      timestamp: now.toISOString()
+    }]
+  };
+
+  // Fire-and-forget. keepalive lets the request survive page unload.
+  try {
+    fetch(TELEMETRY_WEBHOOK, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+      keepalive: true,
+      mode: 'cors'
+    }).catch(() => { /* swallow — don't break the UX */ });
+  } catch (e) { /* swallow */ }
+}
+
+function logCalculation(tabKey) {
+  _telemetrySend(tabKey, 'calc', '');
+}
+
+function reportProblem(btn) {
+  const tabKey = _currentTabKey();
+  const note = window.prompt(
+    'Describe what seems wrong (what you expected vs what you got). '
+    + 'Your current inputs and results will be sent along automatically.',
+    ''
+  );
+  if (note === null) return; // user cancelled
+  _telemetrySend(tabKey, 'report', note || '(no description)');
+  if (btn) {
+    const orig = btn.innerHTML;
+    btn.innerHTML = '&#10003; Report sent!';
+    btn.disabled = true;
+    setTimeout(() => { btn.innerHTML = orig; btn.disabled = false; }, 2400);
+  }
+}
+
 function resetTabDefaults(tabKey) {
   if (!confirm('Reset all inputs on this tab to defaults? Saved progress for this tab will be cleared.')) return;
   const sidebars = document.querySelectorAll('.sidebar');
@@ -1903,6 +2020,7 @@ function resetTabDefaults(tabKey) {
       if (typeof onPixelTypeChange === 'function') onPixelTypeChange();
       if (typeof onInjModelToggle  === 'function') onInjModelToggle();
       if (typeof onInjSourceChange === 'function') onInjSourceChange();
+      if (typeof onInjPatternChange === 'function') onInjPatternChange();
       const dens = document.getElementById('density');
       if (dens) dens.dispatchEvent(new Event('change', { bubbles: true }));
     }
@@ -2023,6 +2141,26 @@ function onInjSourceChange() {
   document.getElementById('injSourceDiffWrap').style.display  = (src === 'dedicatedDiff') ? 'block' : 'none';
   document.getElementById('injSourceSameNote').style.display  = (src === 'same') ? 'block' : 'none';
   if (src === 'dedicatedDiff') populateInjSourcePS();
+}
+function onInjPatternChange() {
+  // Loop pattern: hide per-tap fields (first/spacing are auto-computed to
+  // represent a single tap at the end-of-string). Show the loop-length hint.
+  const pattern = v('injModelPattern');
+  const loop = pattern === 'loop';
+  const firstWrap   = document.getElementById('injModelFirstWrap');
+  const spacingWrap = document.getElementById('injModelSpacingWrap');
+  const loopNote    = document.getElementById('injModelLoopNote');
+  const loopHint    = document.getElementById('injModelLenLoopHint');
+  const lenLabel    = document.getElementById('injModelLenLabel');
+  if (firstWrap)   firstWrap.style.display   = loop ? 'none' : '';
+  if (spacingWrap) spacingWrap.style.display = loop ? 'none' : '';
+  if (loopNote)    loopNote.style.display    = loop ? 'block' : 'none';
+  if (loopHint)    loopHint.style.display    = loop ? 'block' : 'none';
+  if (lenLabel) {
+    lenLabel.innerHTML = loop
+      ? 'Loop return cable length (ft, PSU to end of string) <button class="info-btn" onclick="toggleTip(this,\'injModelLen\')">i</button>'
+      : 'Injection cable length (ft, each) <button class="info-btn" onclick="toggleTip(this,\'injModelLen\')">i</button>';
+  }
 }
 function populateInjSourcePS() {
   const sel = document.getElementById('injModelSourcePS');
@@ -2170,8 +2308,18 @@ function calculate() {
 
   // Injection modeling (optional)
   const injModelOn     = document.getElementById('injModelEnabled').checked;
-  const injModelFirst  = injModelOn ? Math.max(1, Math.round(vn('injModelFirst'))) : 0;
-  const injModelSpacing= injModelOn ? Math.max(1, Math.round(vn('injModelSpacing'))) : 0;
+  const injModelPattern= injModelOn ? (v('injModelPattern') || 'multi') : 'multi';
+  // For loop pattern we auto-compute first/spacing to represent one tap at the
+  // end of the string: start-fed half + end-fed half, with the far-end tap
+  // carrying the floor(N/2) pixels' current across the loop cable.
+  const _loopFirst   = Math.ceil(numPixels / 2);
+  const _loopSpacing = Math.max(1, numPixels - _loopFirst);
+  const injModelFirst  = !injModelOn ? 0
+                       : injModelPattern === 'loop' ? _loopFirst
+                       : Math.max(1, Math.round(vn('injModelFirst')));
+  const injModelSpacing= !injModelOn ? 0
+                       : injModelPattern === 'loop' ? _loopSpacing
+                       : Math.max(1, Math.round(vn('injModelSpacing')));
   const injModelLen    = injModelOn ? vn('injModelLen') : 0;
   const injModelSource = injModelOn ? v('injModelSource') : 'same';
   const injModelSrcPS  = (injModelOn && injModelSource === 'dedicatedDiff' && v('injModelSourcePS'))
@@ -2610,7 +2758,12 @@ function calculate() {
     : verdictType === 'caution'
       ? `Design works — ${cautions.length} caution${cautions.length>1?'s':''} to review`
       : `Design is sound and safe to build`;
-  const verdictSub = `${numPixels.toLocaleString()} px · ${numPS} ${ps.name.replace('MeanWell ','')}${injPS ? ' + ' + injNumPS + ' inj ' + injPS.name.replace('MeanWell ','') : ''} · ${numCircuits} circuit${numCircuits>1?'s':''} · ${injModelOn ? numInjCables + ' injection tap' + (numInjCables!==1?'s':'') : 'no injection modeled'}`;
+  const _injSummary = !injModelOn
+    ? 'no injection modeled'
+    : injModelPattern === 'loop'
+      ? 'loop method (end tap)'
+      : `${numInjCables} injection tap${numInjCables !== 1 ? 's' : ''}`;
+  const verdictSub = `${numPixels.toLocaleString()} px · ${numPS} ${ps.name.replace('MeanWell ','')}${injPS ? ' + ' + injNumPS + ' inj ' + injPS.name.replace('MeanWell ','') : ''} · ${numCircuits} circuit${numCircuits>1?'s':''} · ${_injSummary}`;
 
   const reviewBlock = (cls, head, items) => items.length === 0 ? '' : `
     <div class="review-block review-${cls}">
@@ -2626,6 +2779,9 @@ function calculate() {
       </button>
       <button class="pdf-btn" onclick="copyBuildLink(this)" title="Copy a shareable URL that opens the tool with these exact inputs">
         <span class="pdf-btn-icon">&#128279;</span> Copy Build Link
+      </button>
+      <button class="pdf-btn" onclick="reportProblem(this)" title="Send a bug report with your current inputs and results to the maintainer">
+        <span class="pdf-btn-icon">&#128680;</span> Report a Problem
       </button>
     </div>
 
@@ -2751,10 +2907,12 @@ function calculate() {
             : isFinite(maxExtLen) ? `<br><span style="color:var(--muted); font-size:.76rem;">Max ${extGauge} AWG extension before budget gone: <strong style="color:var(--text)">${maxExtLen.toFixed(1)} ft</strong></span>` : ''}
           ${injModelOn && numInjCables > 0 ? `
           <div style="margin:10px 0 3px 0; font-size:.76rem; color:var(--accent); font-weight:700;">
-            &#9654; Injection chain (bypasses pigtail &mdash; feeds pixels ${mainPixels+1}&ndash;${numPixels})
+            &#9654; ${injModelPattern === 'loop' ? 'Loop return (end-feed)' : 'Injection chain (bypasses pigtail)'} &mdash; feeds pixels ${mainPixels+1}&ndash;${numPixels}
           </div>
           <div style="margin:3px 0 5px 8px; padding:6px 10px; background:rgba(79,142,247,.06); border-left:2px solid var(--accent); border-radius:0 5px 5px 0; font-size:.76rem; line-height:1.85;">
-            ${numInjCables} injection cable${numInjCables>1?'s':''} &times; ${injModelLen} ft of ${injGauge} AWG<br>
+            ${injModelPattern === 'loop'
+              ? `1 loop return &times; ${injModelLen} ft of ${injGauge} AWG (PSU &rarr; end of string)`
+              : `${numInjCables} injection cable${numInjCables>1?'s':''} &times; ${injModelLen} ft of ${injGauge} AWG`}<br>
             Current per cable: <strong style="color:var(--text)">${injCableAmps.toFixed(2)}A peak</strong>
               / <span style="color:var(--ok)">${rwuInjCableAmps.toFixed(2)}A RWU</span>
               ${injCableOk ? '<span class="badge badge-ok">OK</span>' : '<span class="badge badge-danger">OVER '+injAmpacity+'A</span>'}<br>
@@ -2952,6 +3110,9 @@ function calculate() {
       Pixel current is modeled at ${(wattsPerPixel/VOLTS*1000).toFixed(1)} mA/pixel (${wattsPerPixel}W @ ${VOLTS}V) at 100% white; actual draw varies by color and content.
     </div>
   `;
+
+  // Fire telemetry after results are painted so _resultTextFor() can read them.
+  try { logCalculation('string'); } catch (e) { /* non-fatal */ }
 
   // ── Chart.js ─────────────────────────────────────────────────────────────
   const chartCanvas = document.getElementById('vdropChart');
@@ -3216,6 +3377,26 @@ const TIPS = {
       &bull; Single-port, no injection &mdash; the pigtail really does carry the whole strand.<br>
       &bull; You want the conservative worst-case number.<br>
       Leaving it off preserves the original tool behavior exactly.
+    </div>`
+  },
+  injModelPattern: {
+    title: 'Injection Pattern',
+    body: `<div class="tip-section">
+      <div class="tip-section-head">Multiple taps at regular spacing</div>
+      The classic pattern: injection cables branch off a dedicated V+/V&minus; terminal every N pixels down the string.
+      Use this when you have a controller or distro board with multiple output screw terminals and you've run separate injection cables to taps along the strand.
+    </div>
+    <div class="tip-section">
+      <div class="tip-section-head">Loop method &mdash; single tap at end</div>
+      A very common field install: a single 4-conductor cable runs from the PSU to the start of the string.
+      Two of its conductors feed +/&minus; at the <em>start</em>. The other two conductors continue alongside the string and inject +/&minus; at the <em>last</em> pixel.
+      Electrically this is double-ended injection with one tap at the end. Voltage sag is highest at the midpoint of the string.
+    </div>
+    <div class="tip-section">
+      <div class="tip-section-head">Which to pick</div>
+      &bull; Props with repeated taps every ~100&ndash;200 pixels &rarr; <strong>Multiple taps</strong>.<br>
+      &bull; One continuous strand where you fed +/&minus; at both ends from the same cable &rarr; <strong>Loop method</strong>.<br>
+      &bull; Short strands with no injection at all &rarr; leave this whole block turned off.
     </div>`
   },
   injModelFirst: {
@@ -4334,6 +4515,9 @@ function _calculateController() {
       <button class="pdf-btn" onclick="copyBuildLink(this)" title="Copy a shareable URL that opens the tool with these exact inputs">
         <span class="pdf-btn-icon">&#128279;</span> Copy Build Link
       </button>
+      <button class="pdf-btn" onclick="reportProblem(this)" title="Send a bug report with your current inputs and results to the maintainer">
+        <span class="pdf-btn-icon">&#128680;</span> Report a Problem
+      </button>
     </div>
     <div class="results-grid">
 
@@ -4735,6 +4919,8 @@ function _calculateController() {
       All PSU recommendations assume the selected model at the selected derate factor.
     </div>
   `;
+
+  try { logCalculation('ctrl'); } catch (e) { /* non-fatal */ }
 }
 
 // ── MEGATREE PLANNER ───────────────────────────────────────────────────────
@@ -4996,6 +5182,9 @@ function _calculateMegatree() {
       </button>
       <button class="pdf-btn" onclick="copyBuildLink(this)" title="Copy a shareable URL that opens the tool with these exact inputs">
         <span class="pdf-btn-icon">&#128279;</span> Copy Build Link
+      </button>
+      <button class="pdf-btn" onclick="reportProblem(this)" title="Send a bug report with your current inputs and results to the maintainer">
+        <span class="pdf-btn-icon">&#128680;</span> Report a Problem
       </button>
     </div>
     <div class="results-grid">
@@ -5529,6 +5718,8 @@ function _calculateMegatree() {
       </div>
     </div>
   `;
+
+  try { logCalculation('mt'); } catch (e) { /* non-fatal */ }
 }
 
 // ── Init controller mode on first load ────────────────────────────────────
