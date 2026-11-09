@@ -1975,13 +1975,19 @@ function _telemetrySend(tabKey, kind, note) {
   }
   fields.push({ name: 'Inputs', value: '```json\n' + _truncField(inputsJson, 1000) + '\n```' });
   fields.push({ name: 'Result summary', value: '```\n' + _truncField(result, 1000) + '\n```' });
-  if (buildLink) fields.push({ name: 'Open their build', value: buildLink.slice(0, 1024) });
+
+  // The build link URL is ~1800 chars (base64-encoded sidebar state). Discord
+  // field values cap at 1024 — too short. Put it in the embed description,
+  // which allows up to 4096 chars, so the hash arrives intact.
+  const descLines = [`Session \`${TELEMETRY_SESSION_ID}\` · ${now.toISOString()}`];
+  if (buildLink) descLines.push('', '**Open their build:** ' + buildLink);
+  const description = descLines.join('\n').slice(0, 4096);
 
   const payload = {
     username: 'Pixel Calc',
     embeds: [{
       title: title,
-      description: `Session \`${TELEMETRY_SESSION_ID}\` · ${now.toISOString()}`,
+      description: description,
       color: color,
       fields: fields,
       footer: { text: (navigator.userAgent || '').slice(0, 2048) },
