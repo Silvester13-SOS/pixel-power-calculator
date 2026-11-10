@@ -1980,9 +1980,10 @@ function _splitFields(label, body, lang) {
   for (let i = 0; i < body.length; i += perChunk) {
     chunks.push(body.slice(i, i + perChunk));
   }
-  // Hard cap total chunks so one pathological payload can't break the embed
-  // char budget. 4 chunks × 1024 ≈ 4KB which still leaves room for the link.
-  const MAX_CHUNKS = 4;
+  // Hard cap total chunks so the whole embed stays under Discord's 6000-char
+  // total budget. With 1 chunk per label (≤1024) + description (~2000) +
+  // footer (≤256) we stay comfortably under 6000.
+  const MAX_CHUNKS = 1;
   const truncated = chunks.length > MAX_CHUNKS;
   const useChunks = truncated ? chunks.slice(0, MAX_CHUNKS) : chunks;
   useChunks.forEach((chunk, i) => {
@@ -2028,7 +2029,7 @@ function _telemetrySend(tabKey, kind, note) {
       description: description,
       color: color,
       fields: fields,
-      footer: { text: (navigator.userAgent || '').slice(0, 2048) },
+      footer: { text: (navigator.userAgent || '').slice(0, 256) },
       timestamp: now.toISOString()
     }]
   };

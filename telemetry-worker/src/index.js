@@ -100,17 +100,34 @@ export default {
       return cors(new Response(null, { status: 204 }));
     }
 
-    // Forward to Discord
+    // Forward to Discord. Logs only metadata — never the URL or error
+    // messages, because fetch's TypeError includes the URL being fetched,
+    // which would leak the webhook into wrangler tail output.
+    const url = env.DISCORD_WEBHOOK_URL || '';
+    const firstCh = url.charCodeAt(0);
+    const lastCh  = url.charCodeAt(url.length - 1);
+    console.log('fwd: len=' + url.length +
+                ' first=' + firstCh +
+                ' last=' + lastCh +
+                ' startsOk=' + url.startsWith('https://discord.com/api/webhooks/'));
     try {
-      const r = await fetch(env.DISCORD_WEBHOOK_URL, {
+      const r = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
-      // Discord returns 204 on success; propagate status for debugging but
-      // strip the real webhook's response headers from the client.
+      console.log('fwd result: status=' + r.status);
+      if (!r.ok) {
+        // Discord error bodies describe what's wrong with the payload;
+        // they do NOT contain the webhook URL, so safe to log.
+        const errBody = await r.text().catch(() => '<unreadable>');
+        console.log('fwd err body: ' + errBody.slice(0, 800));
+      }
       return cors(new Response(null, { status: r.ok ? 204 : 502 }));
-    } catch {
+    } catch (err) {
+      // Deliberately NOT logging err.message — fetch's TypeError for a bad
+      // URL includes the URL itself, which would leak the secret.
+      console.log('fwd threw: name=' + err.name);
       return cors(new Response('Bad Gateway', { status: 502 }));
     }
   },
