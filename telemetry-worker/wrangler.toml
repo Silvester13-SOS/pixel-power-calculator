@@ -1,0 +1,3 @@
+name = "pixel-calc-telemetry"
+main = "src/index.js"
+compatibility_date = "2025-01-01"

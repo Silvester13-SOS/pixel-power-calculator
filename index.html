@@ -1926,8 +1926,13 @@ async function copyBuildLink(btn) {
 // Discord channel the maintainer owns. Fire-and-forget: if the webhook is
 // unreachable, the calculator keeps working for the user.
 //
-// Rotating the webhook: regenerate in Discord and replace the URL below.
-const TELEMETRY_WEBHOOK = 'https://discord.com/api/webhooks/1569122648871534752/tq5mcD7yCYtxnMzBvcwVwRCcCUSsrx3DPEgqMTrjd8T7r0_B2R4TkLWVrK94IuU02cT8';
+// Telemetry endpoint. This points at a Cloudflare Worker proxy, NOT the
+// Discord webhook directly. The real Discord webhook URL lives only in the
+// Worker's DISCORD_WEBHOOK_URL secret. The Worker rate-limits per IP,
+// validates payload shape, caps daily forwards, and has a kill switch.
+// Source for the Worker: ./telemetry-worker/
+// Empty string disables telemetry (early return in _telemetrySend).
+const TELEMETRY_WEBHOOK = 'https://pixel-calc-telemetry.cantrellcory.workers.dev';
 
 // Session id — groups a single visitor's submissions across multiple
 // Calculate clicks in the same tab load, so the maintainer can see the
