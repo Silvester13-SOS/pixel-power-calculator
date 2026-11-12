@@ -2050,6 +2050,18 @@ function logCalculation(tabKey) {
   _telemetrySend(tabKey, 'calc', '');
 }
 
+// Run the calculate function for whichever tab is currently active. Used
+// after a shared-build-link load so the results pane matches the tab that
+// was shared (not just the String Power tab).
+function _calculateActiveTab() {
+  const tabKey = _currentTabKey();
+  try {
+    if (tabKey === 'ctrl' && typeof calculateController === 'function') calculateController();
+    else if (tabKey === 'mt' && typeof calculateMegatree === 'function') calculateMegatree();
+    else if (typeof calculate === 'function') calculate();
+  } catch (e) { /* non-fatal */ }
+}
+
 function reportProblem(btn) {
   const tabKey = _currentTabKey();
   const note = window.prompt(
@@ -2139,10 +2151,11 @@ window.addEventListener('DOMContentLoaded', () => {
       el.addEventListener('input', saveFormCache);
     }
   });
-  // Re-run the String Power auto-calculation so returning users see results
-  // that reflect their restored cached inputs (the inline calculate() at
-  // bottom of script runs before DOMContentLoaded, i.e. before cache load).
-  try { if (typeof calculate === 'function') calculate(); } catch (e) { /* non-fatal */ }
+  // Re-run the active tab's calculation so returning users (and users opening
+  // a shared build link) see results that reflect their restored inputs. For
+  // hash-loaded links _applyPayload has already switched to the shared tab,
+  // so _calculateActiveTab() targets the right results pane.
+  _calculateActiveTab();
 });
 
 // If the browser reuses an existing tab when a build link is clicked from
@@ -2152,7 +2165,7 @@ window.addEventListener('hashchange', () => {
   const payload = _parseHashPayload();
   if (!payload) return;
   _applyPayload(payload);
-  try { if (typeof calculate === 'function') calculate(); } catch (e) { /* non-fatal */ }
+  _calculateActiveTab();
 });
 
 // ── Save build as PDF (Batch D: #6) ──────────────────────────────────────────
