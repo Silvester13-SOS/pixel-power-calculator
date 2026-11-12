@@ -2748,10 +2748,6 @@ function calculate() {
     t: `Extension wire overloaded (${extGauge} AWG carrying ${mainFeedAmps.toFixed(1)}A, rated ${extAmpacity}A)`,
     b: `Upsize the extension gauge, reduce pixels fed by this port, or add injection closer to pixel 1.`
   });
-  if (!pigtailOk) critical.push({
-    t: `Pigtail overloaded (${pigtailGauge} AWG carrying ${mainFeedAmps.toFixed(1)}A, rated ${WIRE_AMP[pigtailGauge]}A)`,
-    b: `Note: 18 AWG is the largest commercially-available Christmas pigtail. If peak load exceeds that, you can't just upsize the pigtail — shorten what this port drives, inject sooner, or split across multiple ports.`
-  });
   if (injModelOn && !injCableOk) critical.push({
     t: `Injection cables overloaded (${injGauge} AWG carrying ${injCableAmps.toFixed(1)}A each, rated ${injAmpacity}A)`,
     b: `Upsize the injection cable gauge, or reduce the injection spacing so each cable feeds fewer pixels.`
@@ -2790,7 +2786,11 @@ function calculate() {
     t: `Extension run is long (${extLen} ft)`,
     b: `DC distribution over long runs is where voltage disappears. Consider relocating the PSU closer to the prop if feasible.`
   });
-  if (pigtailOn && mainFeedAmps > WIRE_AMP[pigtailGauge] * 0.9 && mainFeedAmps <= WIRE_AMP[pigtailGauge]) cautions.push({
+  if (!pigtailOk) cautions.push({
+    t: `<span style="color:var(--danger)">Pigtail over its continuous ampacity rating (${pigtailGauge} AWG carrying ${mainFeedAmps.toFixed(1)}A, rated ${WIRE_AMP[pigtailGauge]}A)</span>`,
+    b: `<span style="color:var(--danger)">This does <strong>not</strong> fail the build — essentially every real install using an industry 18 AWG xConnect pigtail exceeds its 7A rating, since the pigtail is the same (or heavier) gauge as the pixel strand it feeds.</span> The 7A figure is a conservative <em>sustained</em> rating; short pigtails (~1–2 ft) handling intermittent show load are the industry norm. Treat this as a reminder that the pigtail is not rated for continuous long-duration current at this level — keep it short, keep it ventilated, and if peak load is well above the rating, shorten what this port drives, inject sooner, or split across multiple ports.`
+  });
+  if (pigtailOn && pigtailOk && mainFeedAmps > WIRE_AMP[pigtailGauge] * 0.9 && mainFeedAmps <= WIRE_AMP[pigtailGauge]) cautions.push({
     t: `Pigtail near its ampacity limit (${mainFeedAmps.toFixed(1)}A on ${pigtailGauge} AWG ${WIRE_AMP[pigtailGauge]}A)`,
     b: `Within 10% of max. Any sequence that pushes harder than modeled — or a warmer install location — moves this into overload territory.`
   });
