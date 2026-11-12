@@ -344,6 +344,86 @@
     margin-right:5px; border-radius:1px;
   }
 
+  /* Strand-map SVG — hero timeline showing where peak vs RWU injection would fall */
+  .strand-map-wrap { padding: 14px 10px 6px; }
+  .strand-map {
+    width: 100%; height: auto; display: block;
+    max-width: 980px; margin: 0 auto;
+    font-family: inherit;
+  }
+  .strand-map text { fill: var(--text); font-size: 11.5px; }
+  .strand-map .sm-sub      { fill: var(--muted); font-size: 10px; }
+  .strand-map .sm-title    { font-weight: 700; font-size: 12px; }
+  .strand-map .sm-box-fill { fill: var(--panel2); stroke: var(--border); stroke-width: 1.5; }
+  .strand-map .sm-strand-bg{ fill: rgba(255,255,255,.04); stroke: var(--border); stroke-width: 1; }
+  .strand-map .sm-wire     { stroke: var(--accent); stroke-width: 3; fill: none; }
+  .strand-map .sm-loop     { stroke: var(--accent); stroke-width: 2; fill: none; stroke-dasharray: 5 4; opacity: .7; }
+  .strand-map .sm-mk-user  { stroke: var(--accent); stroke-width: 3; }
+  .strand-map .sm-mk-user-label { fill: var(--accent); font-weight: 700; font-size: 10.5px; }
+  .strand-map .sm-mk-peak  { stroke: #e5e7eb; stroke-width: 1.8; stroke-dasharray: 3 3; opacity: .9; }
+  .strand-map .sm-mk-peak-label { fill: #e5e7eb; font-size: 9.5px; opacity: .85; }
+  .strand-map .sm-mk-rwu   { stroke: var(--ok); stroke-width: 1.8; stroke-dasharray: 5 3; opacity: .95; }
+  .strand-map .sm-mk-rwu-label  { fill: var(--ok); font-size: 9.5px; }
+  .strand-map-legend {
+    display:flex; flex-wrap:wrap; gap:16px; justify-content:center;
+    margin-top: 10px; padding: 8px 10px;
+    font-size:.72rem; color: var(--muted);
+    border-top: 1px solid var(--border);
+  }
+  .strand-map-legend .sm-lg-line {
+    display:inline-block; width:22px; height:0;
+    border-top: 2px solid; vertical-align:middle;
+    margin-right:6px;
+  }
+  .strand-map-legend .sm-lg-line.peak { border-top-style: dashed; border-top-color: #e5e7eb; }
+  .strand-map-legend .sm-lg-line.rwu  { border-top-style: dashed; border-top-color: var(--ok); }
+  .strand-map-legend .sm-lg-line.user { border-top-style: solid;  border-top-color: var(--accent); border-top-width: 3px; }
+
+  /* Smart recommendations block — sits under the strand map */
+  .sm-reco {
+    margin: 10px 0 0; padding: 12px 16px;
+    background: rgba(79,142,247,.07);
+    border: 1px solid rgba(79,142,247,.25);
+    border-radius: 8px;
+    font-size: .82rem; line-height: 1.7;
+  }
+  .sm-reco-head {
+    font-size: .88rem; font-weight: 700; color: var(--accent);
+    margin-bottom: 6px;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .sm-reco ul { margin: 0 0 0 20px; padding: 0; }
+  .sm-reco li { margin: 3px 0; color: var(--text); }
+  .sm-reco li .reco-tag {
+    display:inline-block; font-size:.68rem; font-weight:700;
+    padding:1px 6px; border-radius:3px; margin-right:6px;
+    text-transform: uppercase; letter-spacing: .03em;
+  }
+  .sm-reco li .reco-tag.peak { background: rgba(229,231,235,.14); color: #e5e7eb; }
+  .sm-reco li .reco-tag.rwu  { background: rgba(34,197,94,.14);  color: var(--ok); }
+  .sm-reco li .reco-tag.tip  { background: rgba(79,142,247,.14); color: var(--accent); }
+
+  /* Collapsible result sections — click header to toggle. Chevron is
+     injected via ::after so no per-header HTML change is needed across the
+     three tabs. Applies to every .result-section-header automatically. */
+  .result-section-header {
+    cursor: pointer;
+    user-select: none;
+    transition: background-color .12s ease;
+  }
+  .result-section-header:hover { background: rgba(79,142,247,.08); }
+  .result-section-header::after {
+    content: '\25BE';  /* ▾ */
+    margin-left: auto;
+    font-size: .85rem;
+    color: var(--muted);
+    transition: transform .18s ease;
+    display: inline-block;
+    line-height: 1;
+  }
+  .result-section.collapsed .result-section-header::after { transform: rotate(-90deg); }
+  .result-section.collapsed .result-section-body { display: none; }
+
   /* Verdict banner + review blocks (Batch A: #1 verdict, #3 wins, #8 edge cases) */
   .verdict-row {
     display:flex; align-items:center; gap:14px;
@@ -2132,6 +2212,19 @@ function _syncDependentUI() {
   });
 }
 
+// ── Collapsible result sections ──────────────────────────────────────────────
+// Delegated click handler — clicking any .result-section-header toggles the
+// .collapsed class on its parent .result-section. The chevron (via CSS
+// ::after) rotates on collapse. Works across all three tabs without needing
+// per-header HTML changes.
+document.addEventListener('click', (e) => {
+  const hdr = e.target.closest && e.target.closest('.result-section-header');
+  if (!hdr) return;
+  const sec = hdr.closest('.result-section');
+  if (!sec) return;
+  sec.classList.toggle('collapsed');
+});
+
 window.addEventListener('DOMContentLoaded', () => {
   disableAutofill();
   // URL hash wins over localStorage cache — a shared build link should
@@ -2374,6 +2467,180 @@ function buildDcDiagramSvg(d) {
   return s;
 }
 
+// ── Strand-map SVG builder ───────────────────────────────────────────────────
+// Horizontal timeline of the actual pixel strand with vertical markers showing
+// three overlays: where the user chose to inject, where the peak-white math
+// says taps should fall, and where RWU-scaled math says they could fall.
+// The gap between the white and green markers is the "conservatism cost" of
+// sizing to peak vs typical show load — useful for talking users off the
+// ledge when they say "the tool is too aggressive."
+function buildStrandMapSvg(d) {
+  const vbW = 940, vbH = 230;
+  const xPSU = 20, wPSU = 110;
+  const xExtEnd = 220;
+  const xStrandStart = xExtEnd;
+  const xStrandEnd   = 915;
+  const yStrandTop = 90, yStrandBot = 115;
+  const yStrandMid = (yStrandTop + yStrandBot) / 2;
+  const strandW = xStrandEnd - xStrandStart;
+
+  const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const pxToX = px => xStrandStart + (Math.min(px, d.numPixels) / d.numPixels) * strandW;
+
+  let s = `<svg class="strand-map" viewBox="0 0 ${vbW} ${vbH}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Strand map — peak vs RWU injection point overlay">
+    <!-- PSU box -->
+    <rect class="sm-box-fill" x="${xPSU}" y="${yStrandMid - 30}" width="${wPSU}" height="60" rx="7"/>
+    <text class="sm-title" x="${xPSU + wPSU/2}" y="${yStrandMid - 10}" text-anchor="middle">Power Supply</text>
+    <text x="${xPSU + wPSU/2}" y="${yStrandMid + 8}" text-anchor="middle" style="font-weight:700;">${d.VOLTS}V DC</text>
+    <text class="sm-sub" x="${xPSU + wPSU/2}" y="${yStrandMid + 22}" text-anchor="middle">${d.mainFeedAmps.toFixed(2)}A peak · ${d.rwuMainFeedAmps.toFixed(2)}A RWU</text>
+
+    <!-- PSU → Pixel 1 wire (pigtail + extension collapsed into one line) -->
+    <line class="sm-wire" x1="${xPSU + wPSU}" y1="${yStrandMid}" x2="${xStrandStart}" y2="${yStrandMid}"/>
+    <text class="sm-sub" x="${(xPSU + wPSU + xStrandStart)/2}" y="${yStrandMid - 8}" text-anchor="middle">${d.pigtailOn ? esc(d.pigtailGauge)+' AWG pig + ' : ''}${esc(d.extGauge)} AWG ext · ${d.extLen} ft</text>
+    <text class="sm-sub" x="${(xPSU + wPSU + xStrandStart)/2}" y="${yStrandMid + 16}" text-anchor="middle">−${(d.vdropPigtail + d.vdropExtension).toFixed(3)}V peak</text>
+
+    <!-- Strand bar (Pixel 1 .. Pixel N) -->
+    <rect class="sm-strand-bg" x="${xStrandStart}" y="${yStrandTop}" width="${strandW}" height="${yStrandBot - yStrandTop}" rx="4"/>
+    <text class="sm-sub" x="${xStrandStart}" y="${yStrandBot + 15}" text-anchor="start">px 1</text>
+    <text class="sm-sub" x="${xStrandEnd}" y="${yStrandBot + 15}" text-anchor="end">px ${d.numPixels.toLocaleString()}</text>
+    <text class="sm-sub" x="${(xStrandStart + xStrandEnd)/2}" y="${yStrandTop - 6}" text-anchor="middle">${d.numPixels.toLocaleString()} pixels · ${(d.spacingFt*12).toFixed(1)}&quot; spacing · ${(d.numPixels * d.spacingFt).toFixed(0)} ft total</text>`;
+
+  // ── RWU-recommended markers (green, drawn under peak so peak is on top) ──
+  if (d.pixPerSegRwu > 0 && d.pixPerSegRwu < d.numPixels) {
+    let pos = d.pixPerSegRwu;
+    let n = 0;
+    while (pos < d.numPixels && n < 40) {
+      const x = pxToX(pos);
+      s += `
+    <line class="sm-mk-rwu" x1="${x}" y1="${yStrandTop - 18}" x2="${x}" y2="${yStrandBot + 18}"/>
+    <text class="sm-mk-rwu-label" x="${x}" y="${yStrandBot + 30}" text-anchor="middle">${pos}</text>`;
+      pos += d.pixPerSegRwu;
+      n++;
+    }
+  }
+
+  // ── Peak-recommended markers (white, drawn on top of RWU) ──
+  if (d.pixPerSegPeak > 0 && d.pixPerSegPeak < d.numPixels) {
+    let pos = d.pixPerSegPeak;
+    let n = 0;
+    while (pos < d.numPixels && n < 40) {
+      const x = pxToX(pos);
+      s += `
+    <line class="sm-mk-peak" x1="${x}" y1="${yStrandTop - 32}" x2="${x}" y2="${yStrandBot + 4}"/>
+    <text class="sm-mk-peak-label" x="${x}" y="${yStrandTop - 36}" text-anchor="middle">${pos}</text>`;
+      pos += d.pixPerSegPeak;
+      n++;
+    }
+  }
+
+  // ── User's chosen taps (bright blue, solid, drawn last so always visible) ──
+  // For chain pattern: injModelFirst, +spacing, +spacing...
+  // For loop pattern: just the loop return at the end (drawn as curved line)
+  if (d.injModelOn) {
+    if (d.injModelPattern === 'loop') {
+      // Loop return: PSU drops below and loops back to end of strand
+      const yLoop = yStrandBot + 55;
+      const xLoopStart = xPSU + wPSU / 2;
+      const xLoopEnd   = xStrandEnd;
+      s += `
+    <path class="sm-loop" d="M ${xLoopStart} ${yStrandMid + 30} L ${xLoopStart} ${yLoop} L ${xLoopEnd} ${yLoop} L ${xLoopEnd} ${yStrandBot + 18}"/>
+    <text class="sm-mk-user-label" x="${(xLoopStart + xLoopEnd)/2}" y="${yLoop - 5}" text-anchor="middle">↑ Loop return (your config · ${d.injModelLen} ft of ${esc(d.injGauge)} AWG)</text>
+    <line class="sm-mk-user" x1="${xStrandEnd}" y1="${yStrandTop - 6}" x2="${xStrandEnd}" y2="${yStrandBot + 6}"/>`;
+    } else {
+      // Chain pattern: show taps at injModelFirst, injModelFirst+spacing, ...
+      let pos = d.injModelFirst;
+      let n = 0;
+      while (pos < d.numPixels && n < 20) {
+        const x = pxToX(pos);
+        s += `
+    <line class="sm-mk-user" x1="${x}" y1="${yStrandTop - 6}" x2="${x}" y2="${yStrandBot + 6}"/>
+    <text class="sm-mk-user-label" x="${x}" y="${yStrandTop - 10}" text-anchor="middle">▼ ${pos}</text>`;
+        pos += d.injModelSpacing;
+        n++;
+      }
+    }
+  }
+
+  s += `</svg>
+  <div class="strand-map-legend">
+    <span><span class="sm-lg-line user"></span>Your injection config${d.injModelOn ? '' : ' (injection modelling off)'}</span>
+    <span><span class="sm-lg-line peak"></span>Peak-white recommended taps (every ${d.pixPerSegPeak || '—'} px)</span>
+    <span><span class="sm-lg-line rwu"></span>RWU-recommended taps (every ${d.pixPerSegRwu || '—'} px @ ${Math.round(d.rwuFactor*100)}%)</span>
+  </div>`;
+  return s;
+}
+
+// ── Strand-map recommendations ───────────────────────────────────────────────
+// Returns an array of {tag, text} hint objects comparing the user's current
+// injection config to what peak and RWU math would recommend. Intent is to
+// educate the user on the "conservative sizing to peak" trade-off and point
+// out concrete tweaks (move the first tap, drop a tap, switch pattern) that
+// the math supports — not to override their design, just surface the delta.
+function buildStrandMapRecos(d) {
+  const recos = [];
+  if (!d.injModelOn) {
+    // No injection modelled — only hint if the math says they could benefit.
+    if (d.pixPerSegPeak > 0 && d.numPixels > d.pixPerSegPeak) {
+      recos.push({
+        tag: 'tip',
+        text: `Injection modelling is <strong>off</strong>. At peak white this strand would need taps every <strong>${d.pixPerSegPeak} px</strong> (${d.numInjPointsPeak} tap${d.numInjPointsPeak!==1?'s':''}) to keep the far pixel above ${d.minV}V. Turn on "Model my actual injection setup" in the sidebar to size it.`
+      });
+    }
+    return recos;
+  }
+
+  // Recommendation 1 — if the user's first tap is way inside the peak limit
+  // and their pattern is 'chain', they can push the first tap out.
+  if (d.injModelPattern !== 'loop' && d.pixPerSegPeak > d.injModelFirst + 10) {
+    const savings = Math.max(0, d.numInjPointsUser - d.numInjPointsPeak);
+    recos.push({
+      tag: 'peak',
+      text: `Your first tap is at pixel <strong>${d.injModelFirst}</strong>; peak math allows <strong>${d.pixPerSegPeak}</strong>. Push the first tap to ${d.pixPerSegPeak} and use the same spacing${savings>0?` to drop injection points from ${d.numInjPointsUser} to ${d.numInjPointsPeak} (saves ${savings} tap${savings!==1?'s':''})`:''}.`
+    });
+  }
+
+  // Recommendation 2 — RWU-based optimistic sizing, if different enough from
+  // peak to matter. This is the "if you trust your RWU and your show never
+  // hits all-white" case — user explicitly opted into that framing.
+  if (d.pixPerSegRwu > d.pixPerSegPeak + 5 && d.pixPerSegRwu < d.numPixels) {
+    const savings = Math.max(0, d.numInjPointsPeak - d.numInjPointsRwu);
+    const firstSuggest = Math.min(d.numPixels - 1, d.pixPerSegRwu);
+    const patternHint = d.injModelPattern === 'loop'
+      ? `If you use the loop method you could have the RWU at <strong>${firstSuggest}</strong> pixels for first injection instead of ${d.injModelFirst}${savings>0?` and have ${savings} less injection point${savings!==1?'s':''} overall`:''}.`
+      : `At RWU (${Math.round(d.rwuFactor*100)}%) you could space taps every <strong>${d.pixPerSegRwu}</strong> px (${d.numInjPointsRwu} total)${savings>0?` — ${savings} fewer than the peak-sized ${d.numInjPointsPeak}`:''}.`;
+    recos.push({
+      tag: 'rwu',
+      text: patternHint + ' <span style="color:var(--muted); font-size:.8em;">Only safe if your show never fires sustained all-white — the brightness slider is already your ceiling.</span>'
+    });
+  }
+
+  // Recommendation 3 — pattern suggestion. Loop is usually better for small
+  // props or when the user's first tap is already past halfway; chain is
+  // usually better when peak-sized spacing is tight.
+  if (d.injModelPattern !== 'loop' && d.numInjPointsPeak === 1 && d.injModelFirst > d.numPixels * 0.4) {
+    recos.push({
+      tag: 'tip',
+      text: `For a strand this size with just one injection, <strong>loop return</strong> (end tap) is usually cleaner than a single mid-strand tap — same number of taps, one less in-line connector.`
+    });
+  } else if (d.injModelPattern === 'loop' && d.pixPerSegPeak > 0 && d.numPixels > d.pixPerSegPeak * 2) {
+    recos.push({
+      tag: 'tip',
+      text: `With ${d.numPixels} pixels and peak-sized segments of ${d.pixPerSegPeak} px, <strong>multiple taps at regular spacing</strong> (${d.numInjPointsPeak} tap${d.numInjPointsPeak!==1?'s':''}) will hold voltage better than a loop return on this strand.`
+    });
+  }
+
+  // Recommendation 4 — call out the budget constraint plainly if things are
+  // tight at peak. Educational, not corrective.
+  if (d.vBudgetStrip > 0 && d.vBudgetStrip < 0.6 && d.VOLTS === 5) {
+    recos.push({
+      tag: 'tip',
+      text: `You're on <strong>5V with only ${d.vBudgetStrip.toFixed(2)}V of voltage budget</strong> after the main feed drop. Every injection decision is going to look "aggressive" here because physics is tight — this isn't the tool being conservative, it's 5V being a hard environment.`
+    });
+  }
+
+  return recos;
+}
+
 function calculate() {
   const numPixels     = Math.round(vn('numPixels'));
   const brightness    = vn('brightness') / 100;
@@ -2577,6 +2844,31 @@ function calculate() {
   const injTapAmps   = pixPerSeg * ampsPerPixel;
   const injTapOk     = injTapAmps <= injAmpacity;   // always true now; kept as safety check
   const numInjPoints = pixPerSeg > 0 ? Math.max(0, Math.ceil(numPixels / pixPerSeg) - 1) : 0;
+
+  // ── RWU-scaled injection sizing (for the strand-map hero diagram) ──────────
+  // Mirror the peak-sized math but using rwu-scaled per-pixel amps and
+  // rwu-scaled strip budget. This is the "if your show really does average
+  // X% of white, what could the taps actually look like" number — shown for
+  // comparison next to the peak numbers, never used to size wire or PSUs.
+  const rwuAmpsPerPixel = ampsPerPixel * rwuFactor;
+  const pixPerSegVdropRwu = rwuVBudgetStrip > 0 && rwuAmpsPerPixel > 0 && spacingFt > 0
+    ? Math.floor(Math.sqrt(rwuVBudgetStrip / (rwuAmpsPerPixel * injResPerFt * spacingFt)))
+    : 0;
+  const pixPerSegAmpRwu = rwuAmpsPerPixel > 0 ? Math.floor(injAmpacity / rwuAmpsPerPixel) : 999999;
+  const pixPerSegRwu = pixPerSegVdropRwu > 0
+    ? Math.max(1, Math.min(pixPerSegVdropRwu, pixPerSegAmpRwu))
+    : 0;
+  const numInjPointsRwu  = pixPerSegRwu  > 0 ? Math.max(0, Math.ceil(numPixels / pixPerSegRwu)  - 1) : 0;
+  const numInjPointsPeak = pixPerSeg      > 0 ? Math.max(0, Math.ceil(numPixels / pixPerSeg)      - 1) : 0;
+  // Count the user's actual configured taps. Loop pattern = 1 (the end tap).
+  // Chain pattern = taps at injModelFirst, +spacing, ... that fall inside the strand.
+  const numInjPointsUser = !injModelOn ? 0
+    : injModelPattern === 'loop' ? 1
+    : (() => {
+        let count = 0, pos = injModelFirst;
+        while (pos < numPixels && count < 40) { count++; pos += injModelSpacing; }
+        return count;
+      })();
 
   // ── Build voltage-drop chart data (injection segment, starting at vAtStrip) ──
   // Shows voltage at the farthest pixel as segment length increases,
@@ -2889,6 +3181,36 @@ function calculate() {
     ${reviewBlock('critical', '&#9888; Critical issues', critical)}
     ${reviewBlock('caution',  '&#9888; Cautions',         cautions)}
     ${reviewBlock('wins',     '&#10003; What you got right', wins)}
+
+    <!-- ── STRAND MAP (hero) — peak vs RWU injection overlay + smart recos ── -->
+    <div class="result-section" data-rs-id="strand-map">
+      <div class="result-section-header">&#128269; Strand Map &mdash; your taps vs peak-white vs RWU recommendation</div>
+      <div class="result-section-body">
+        <div class="strand-map-wrap">
+          ${buildStrandMapSvg({
+            VOLTS, minV, numPixels, spacingFt,
+            pigtailOn, pigtailGauge, extGauge, extLen,
+            vdropPigtail, vdropExtension,
+            mainFeedAmps, rwuMainFeedAmps, rwuFactor,
+            injModelOn, injModelPattern, injModelFirst, injModelSpacing, injModelLen, injGauge,
+            pixPerSegPeak: pixPerSeg, pixPerSegRwu
+          })}
+        </div>
+        ${(() => {
+          const recos = buildStrandMapRecos({
+            injModelOn, injModelPattern, injModelFirst, injModelSpacing,
+            numPixels, pixPerSegPeak: pixPerSeg, pixPerSegRwu,
+            numInjPointsUser, numInjPointsPeak, numInjPointsRwu,
+            rwuFactor, vBudgetStrip, VOLTS, minV
+          });
+          if (recos.length === 0) return '';
+          return `<div class="sm-reco">
+            <div class="sm-reco-head">&#128161; Smart recommendations</div>
+            <ul>${recos.map(r => `<li><span class="reco-tag ${r.tag}">${r.tag}</span>${r.text}</li>`).join('')}</ul>
+          </div>`;
+        })()}
+      </div>
+    </div>
 
     <!-- ── OVERVIEW CARDS ── -->
     <div class="results-grid">
