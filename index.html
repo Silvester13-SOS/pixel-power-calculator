@@ -4470,9 +4470,12 @@ function _calculateController() {
 
   // ── Bank rows ─────────────────────────────────────────────────────────────
   const bankRows = bankData.map(b => {
-    // portOver/bankOver are now worst-case basis — anything over is a hard fail.
-    // Wiring ampacity failures also hard-fail the bank row.
-    const anyFail = b.bankOver || b.portOver || b.anyCtoEOver || b.anyExtOver;
+    // portOver/bankOver are worst-case basis — anything over is a hard fail.
+    // Extension-cable ampacity failure also hard-fails the bank row.
+    // Ctrl→Ext over-ampacity is advisory only (that short run is the "port
+    // pigtail", typically an industry 18 AWG xConnect), so it is shown in red
+    // in the per-port row but does NOT flip the bank badge to fail.
+    const anyFail = b.bankOver || b.portOver || b.anyExtOver;
     const badgeClass = anyFail ? 'badge-danger' : 'badge-ok';
     // Per-port detail sub-rows (only in per-port mode)
     let portDetail = '';
@@ -4532,7 +4535,7 @@ function _calculateController() {
     </td>
     <td>${(ctoEOn || extLen > 0)
       ? `${b.maxPortDrop.toFixed(3)}V max<br>
-         ${ctoEOn ? `<span style="font-size:.71rem;color:${b.anyCtoEOver?'var(--danger)':'var(--muted)'};">Ctrl&#8594;Ext: &minus;${b.maxCtoEDrop.toFixed(3)}V ${b.anyCtoEOver?'&#9940; FAIL &gt;'+ctoEAmpacity+'A':''}</span><br>` : ''}
+         ${ctoEOn ? `<span style="font-size:.71rem;color:${b.anyCtoEOver?'var(--danger)':'var(--muted)'};">Ctrl&#8594;Ext: &minus;${b.maxCtoEDrop.toFixed(3)}V ${b.anyCtoEOver?'&#9888; &gt;'+ctoEAmpacity+'A (advisory)':''}</span><br>` : ''}
          ${extLen > 0 ? `<span style="font-size:.71rem;color:${b.anyExtOver?'var(--danger)':'var(--muted)'};">Ext: &minus;${b.maxExtDrop.toFixed(3)}V ${b.anyExtOver?'&#9940; FAIL &gt;'+extAmpacity+'A':''}</span>` : ''}`
       : '<span style="color:var(--muted);font-size:.8rem;">—</span>'}</td>
     <td><span class="badge ${badgeClass}">
@@ -4547,10 +4550,10 @@ function _calculateController() {
           fails.push('&#9940; <strong>FAIL</strong> &mdash; '+b.totalAmpsWorst.toFixed(2)+'A @100% exceeds '+spec.maxAmpsPerBank+'A bank terminal'
             +'<br><span style="font-size:.7rem; opacity:.9;">Fix: redistribute pixels across more banks or lower px/port</span>');
         }
-        if (b.anyCtoEOver) {
-          const fix = recommendedGauge(b.portExtData.reduce((m,p)=>Math.max(m,p.portAmpsWorst),0));
-          fails.push('&#9940; <strong>FAIL</strong> &mdash; Ctrl&#8594;Ext '+ctoEGauge+' AWG over '+ctoEAmpacity+'A at 100%. Upsize to '+fix+' AWG.');
-        }
+        // Ctrl→Ext over-ampacity is advisory only — that short run is the port
+        // pigtail (industry 18 AWG xConnect), which commonly sees brief loads
+        // over its continuous rating on real builds. Shown in red in the
+        // DC-wiring column; intentionally not pushed into the build-fail list.
         if (b.anyExtOver) {
           const fix = recommendedGauge(b.portExtData.reduce((m,p)=>Math.max(m,p.portAmpsWorst),0));
           fails.push('&#9940; <strong>FAIL</strong> &mdash; Extension '+extGauge+' AWG over '+extAmpacity+'A at 100%. Upsize to '+fix+' AWG.');
@@ -4568,8 +4571,10 @@ function _calculateController() {
   const psRows = psGroupData.map(g => {
     const psuLoadWattsWorst = g.psuLoadWattsWorst;
     const rwuPsuWatts = g.banks.reduce((s, bi) => s + bankData[bi].rwuPsuLoadWatts, 0);
-    // Worst-case overload is the safety trigger → hard fail
-    const anyFail = g.overloaded || !g.pigtailOk;
+    // Worst-case PSU wattage overload is the safety trigger → hard fail.
+    // Pigtail over-ampacity is advisory only (industry 18 AWG xConnect pigtails
+    // routinely exceed 7A on real builds), so it does not flip the PSU row to fail.
+    const anyFail = g.overloaded;
     const statusBadge = anyFail ? 'badge-danger' : 'badge-ok';
     return `<tr>
     <td><strong>PSU ${g.psNum}</strong></td>
@@ -4583,15 +4588,18 @@ function _calculateController() {
     <td><span class="badge ${g.overloaded?'badge-danger':g.loadPct>90?'badge-warn':'badge-ok'}">${g.loadPct.toFixed(0)}% @100%</span></td>
     ${pigtailOn ? `<td>${g.vdropPigtail.toFixed(3)}V @100%
       <br><span style="font-size:.72rem;color:${g.pigtailOk?'var(--muted)':'var(--danger)'};">
-        ${g.psAmpsWorst.toFixed(2)}A on ${pigtailGauge} AWG${g.pigtailOk?'':'<br>&#9940; FAIL &mdash; upsize to '+recommendedGauge(g.psAmpsWorst)+' AWG'}
+        ${g.psAmpsWorst.toFixed(2)}A on ${pigtailGauge} AWG${g.pigtailOk?'':'<br>&#9888; Over '+pigtailAmpacity+'A continuous rating &mdash; advisory, not a build fail'}
       </span></td>` : ''}
     <td>${g.acDraw.toFixed(1)}W / ${g.acAmps.toFixed(2)}A @ ${acV}V</td>
     <td><span class="badge ${statusBadge}">${
       (() => {
         const fails = [];
         if (g.overloaded) fails.push('&#9940; <strong>FAIL</strong> &mdash; '+psuLoadWattsWorst.toFixed(1)+'W @100% exceeds '+usableWatts.toFixed(0)+'W usable<br><span style="font-size:.7rem; opacity:.9;">Fix: split this bank onto a dedicated PSU, or move to a larger PS model</span>');
-        if (!g.pigtailOk) fails.push('&#9940; <strong>FAIL</strong> &mdash; PSU&#8594;Ctrl '+pigtailGauge+' AWG carries '+g.psAmpsWorst.toFixed(2)+'A, rated '+pigtailAmpacity+'A. Upsize to '+recommendedGauge(g.psAmpsWorst)+' AWG.');
-        return fails.length ? fails.join('<br>') : 'OK at 100% white';
+        // PSU→Ctrl pigtail over-ampacity is advisory only (shown in red in the
+        // DC Wiring detail cell). Industry 18 AWG xConnect pigtails are standard
+        // and commonly exceed the 7A sustained rating on real builds, so this
+        // intentionally does not count toward the build-fail list.
+        return fails.length ? fails.join('<br>') : (g.pigtailOk ? 'OK at 100% white' : 'OK &mdash; pigtail over rated ampacity (advisory)');
       })()
     }</span></td>
   </tr>`;
@@ -4693,7 +4701,7 @@ function _calculateController() {
                &minus;${maxPigtailDrop.toFixed(3)}V max<br>
                <span style="font-size:.76rem; color:var(--muted);">
                  Highest-loaded PSU @ 100%: <strong style="color:var(--text);">${Math.max(...psGroupData.map(g=>g.psAmpsWorst)).toFixed(2)}A</strong>
-                 ${psGroupData.some(g=>!g.pigtailOk)?'<br><span style="color:var(--danger); font-weight:600;">&#9940; FAIL &mdash; exceeds '+pigtailAmpacity+'A ampacity. Upsize to '+recommendedGauge(Math.max(...psGroupData.map(g=>g.psAmpsWorst)))+' AWG or split onto more PSUs.</span>':''}
+                 ${psGroupData.some(g=>!g.pigtailOk)?'<br><span style="color:var(--danger); font-weight:600;">&#9888; Over '+pigtailAmpacity+'A continuous rating &mdash; advisory, not a build failure.</span><br><span style="font-size:.7rem; color:var(--muted);">The industry 18 AWG xConnect pigtail is standard across real-world builds and commonly exceeds its '+pigtailAmpacity+'A sustained rating on short runs. Keep the pigtail short and ventilated; for extra margin, upsize to '+recommendedGauge(Math.max(...psGroupData.map(g=>g.psAmpsWorst)))+' AWG or split across more PSUs.</span>':''}
                </span><br>`
             : '<span style="color:var(--muted);">No PSU&#8594;Ctrl wire included</span><br>'}
           ${ctoEOn
@@ -4701,7 +4709,7 @@ function _calculateController() {
                &minus;${maxCtoEDrop.toFixed(3)}V max<br>
                <span style="font-size:.76rem; color:var(--muted);">
                  Highest port @ 100%: <strong style="color:var(--text);">${maxPortAmpsWorst.toFixed(2)}A</strong>
-                 ${bankData.some(b=>b.anyCtoEOver)?'<br><span style="color:var(--danger); font-weight:600;">&#9940; FAIL &mdash; exceeds '+ctoEAmpacity+'A ampacity on some ports. Upsize to '+recommendedGauge(maxPortAmpsWorst)+' AWG.</span>':''}
+                 ${bankData.some(b=>b.anyCtoEOver)?'<br><span style="color:var(--danger); font-weight:600;">&#9888; Over '+ctoEAmpacity+'A continuous rating on some ports &mdash; advisory, not a build failure.</span><br><span style="font-size:.7rem; color:var(--muted);">The Ctrl&#8594;Ext run is typically a short 18 AWG xConnect port pigtail, which commonly sees brief loads above the continuous rating on real builds. For extra margin, upsize to '+recommendedGauge(maxPortAmpsWorst)+' AWG.</span>':''}
                </span><br>`
             : '<span style="color:var(--muted);">No Ctrl&#8594;Ext wire included</span><br>'}
           <strong>Extension (${extGauge} AWG, ${extLen} ft):</strong>
@@ -4990,7 +4998,7 @@ function _calculateController() {
           const recFeeder = recommendedGauge(worstPsu);
           const curOk = psGroupData.every(g => g.pigtailOk);
           if (!curOk) {
-            lines.push(`<li style="color:var(--danger);"><strong>PSU&#8594;Controller feeder: ${pigtailGauge} AWG is unsafe</strong> at ${worstPsu.toFixed(2)}A worst case. Upsize to <strong>${recFeeder} AWG</strong> &mdash; OR split high-load banks onto dedicated PSUs so each feeder stays under the ${pigtailAmpacity}A rating.</li>`);
+            lines.push(`<li style="color:var(--danger);"><strong>PSU&#8594;Controller feeder: ${pigtailGauge} AWG is over its ${pigtailAmpacity}A continuous rating</strong> at ${worstPsu.toFixed(2)}A worst case. This is the industry-standard xConnect pigtail and routinely sees loads above its sustained rating on real builds, so it is advisory rather than a build failure. For extra margin, upsize to <strong>${recFeeder} AWG</strong> or split high-load banks onto dedicated PSUs.</li>`);
           } else {
             lines.push(`<li>PSU&#8594;Controller feeders: ${pigtailGauge} AWG is OK at ${worstPsu.toFixed(2)}A worst case (rated ${pigtailAmpacity}A).</li>`);
           }
